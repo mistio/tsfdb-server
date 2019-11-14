@@ -1,0 +1,191 @@
+openapi: 3.0.0
+info:
+  license:
+    name: MIT
+  title: TSFDB
+  version: 1.0.0
+servers:
+- url: https://tsfdb.mist.io/v1
+paths:
+  /datapoints:
+    get:
+      operationId: fetch_datapoints
+      parameters:
+      - description: Comma seperated id's of the resources to retrieve datapoints
+          for
+        explode: true
+        in: query
+        name: query
+        required: true
+        schema:
+          type: string
+        style: form
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatapointsResponse'
+          description: Expected response to a valid request
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: unexpected error
+      summary: Return datapoints within a given time range for given resources & metric
+        name patterns
+      tags:
+      - datapoints
+      x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
+  /resources:
+    get:
+      operationId: list_resources
+      parameters:
+      - description: How many items to return at one time (max 100)
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          format: int32
+          type: integer
+        style: form
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resources'
+          description: A paged array of resources
+          headers:
+            x-next:
+              description: A link to the next page of responses
+              explode: false
+              schema:
+                type: string
+              style: simple
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: unexpected error
+      summary: List all monitored resources
+      tags:
+      - resources
+      x-openapi-router-controller: tsfdb_server_v1.controllers.resources_controller
+  /resources/{resourceId}:
+    get:
+      operationId: list_metrics_by_resource
+      parameters:
+      - description: The id of the resource to retrieve
+        explode: false
+        in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+          description: Expected response to a valid request
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: unexpected error
+      summary: Return metrics and metadata for a specific resource
+      tags:
+      - resources
+      x-openapi-router-controller: tsfdb_server_v1.controllers.resources_controller
+components:
+  callbacks: {}
+  examples: {}
+  headers: {}
+  links: {}
+  parameters: {}
+  requestBodies: {}
+  responses: {}
+  schemas:
+    DatapointsResponse:
+      example:
+        query: query
+        series:
+        - datapoints:
+          - - 1.43031207E12
+            - 0.8008281904610115
+          - - 1.4303121E12
+            - 0.8008281904610115
+        - datapoints:
+          - - 1.43031207E12
+            - 0.8008281904610115
+          - - 1.4303121E12
+            - 0.8008281904610115
+        status: status
+      properties:
+        query:
+          type: string
+        series:
+          items:
+            $ref: '#/components/schemas/SeriesResponse'
+          type: array
+        status:
+          type: string
+      type: object
+    Error:
+      properties:
+        code:
+          format: int32
+          type: integer
+        message:
+          type: string
+      required:
+      - code
+      - message
+      type: object
+    Resource:
+      example:
+        id: dbsrv3
+        metrics:
+        - system.load
+        - cpu.idle
+        - mem.nonfree
+      properties:
+        id:
+          format: string
+          type: string
+        metrics:
+          items:
+            type: string
+          type: array
+      required:
+      - id
+      - metrics
+      - name
+      type: object
+    Resources:
+      items:
+        $ref: '#/components/schemas/Resource'
+      type: array
+    SeriesResponse:
+      example:
+        datapoints:
+        - - 1.43031207E12
+          - 0.8008281904610115
+        - - 1.4303121E12
+          - 0.8008281904610115
+      properties:
+        datapoints:
+          items:
+            items:
+              type: number
+            type: array
+          type: array
+      type: object
+  securitySchemes: {}
