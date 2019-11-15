@@ -4,6 +4,7 @@ import six
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
+from .helpers import fetch
 
 
 def fetch_datapoints(query):  # noqa: E501
@@ -16,4 +17,11 @@ def fetch_datapoints(query):  # noqa: E501
 
     :rtype: DatapointsResponse
     """
-    return 'do some magic!'
+    funcs = {"fetch": fetch}
+    code = compile(query, "query", "eval")
+    data = eval(code, funcs)
+
+    if isinstance(data, Error):
+        return data
+    else:
+        return DatapointsResponse(query=str(query), series=data)
