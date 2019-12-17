@@ -167,7 +167,6 @@ components:
       required:
       - id
       - metrics
-      - name
       type: object
     Resources:
       items:
