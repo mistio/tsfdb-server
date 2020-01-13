@@ -8,7 +8,7 @@ import logging
 
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
-fdb.api_version(610)
+fdb.api_version(620)
 
 log = logging.getLogger(__name__)
 
