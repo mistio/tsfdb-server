@@ -11,8 +11,7 @@ paths:
     get:
       operationId: fetch_datapoints
       parameters:
-      - description: Comma seperated id's of the resources to retrieve datapoints
-          for
+      - description: Comma seperated id's of the metrics to retrieve datapoints for
         explode: true
         in: query
         name: query
@@ -35,6 +34,22 @@ paths:
           description: unexpected error
       summary: Return datapoints within a given time range for given resources & metric
         name patterns
+      tags:
+      - datapoints
+      x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
+    post:
+      operationId: write_datapoints
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: json
+        description: Datapoints object to write
+        required: true
+      responses:
+        200:
+          description: Write success response
+      summary: Write datapoints to db
       tags:
       - datapoints
       x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
