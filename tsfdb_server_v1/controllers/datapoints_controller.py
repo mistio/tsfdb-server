@@ -6,7 +6,6 @@ from RestrictedPython import compile_restricted
 from RestrictedPython import safe_builtins
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
-from tsfdb_server_v1.models.json import Json  # noqa: E501
 from tsfdb_server_v1 import util
 from .helpers import fetch, deriv
 
