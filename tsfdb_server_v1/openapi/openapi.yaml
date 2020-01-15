@@ -43,7 +43,7 @@ paths:
         content:
           application/json:
             schema:
-              type: json
+              type: object
         description: Datapoints object to write
         required: true
       responses:
