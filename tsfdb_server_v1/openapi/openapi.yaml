@@ -57,7 +57,7 @@ paths:
     get:
       operationId: list_resources
       parameters:
-      - description: How many items to return at one time (max 100)
+      - description: How many items to return at one time (max 101)
         explode: true
         in: query
         name: limit
