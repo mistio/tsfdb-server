@@ -11,9 +11,22 @@ def fetch_datapoints(query):  # noqa: E501
 
      # noqa: E501
 
-    :param query: Comma seperated id&#39;s of the resources to retrieve datapoints for
+    :param query: Comma seperated id&#39;s of the metrics to retrieve datapoints for
     :type query: str
 
     :rtype: DatapointsResponse
+    """
+    return 'do some magic!'
+
+
+def write_datapoints(body):  # noqa: E501
+    """Write datapoints to db
+
+     # noqa: E501
+
+    :param body: Datapoints object to write
+    :type body: 
+
+    :rtype: None
     """
     return 'do some magic!'

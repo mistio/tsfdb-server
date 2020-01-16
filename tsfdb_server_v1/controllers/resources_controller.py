@@ -24,7 +24,7 @@ def list_resources(limit=None):  # noqa: E501
 
      # noqa: E501
 
-    :param limit: How many items to return at one time (max 100)
+    :param limit: How many items to return at one time (max 101)
     :type limit: int
 
     :rtype: List[Resource]
