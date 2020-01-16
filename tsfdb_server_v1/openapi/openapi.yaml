@@ -39,6 +39,14 @@ paths:
       x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
     post:
       operationId: write_datapoints
+      parameters:
+      - explode: false
+        in: header
+        name: owner
+        required: true
+        schema:
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
