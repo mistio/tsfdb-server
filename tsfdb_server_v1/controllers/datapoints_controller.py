@@ -46,13 +46,15 @@ def fetch_datapoints(query):  # noqa: E501
         return DatapointsResponse(query=str(query), series=data)
 
 
-def write_datapoints(body):  # noqa: E501
+def write_datapoints(body, owner=None):  # noqa: E501
     """Write datapoints to db
 
      # noqa: E501
 
     :param body: Datapoints object to write
-    :type body: 
+    :type body:
+    :param owner:
+    :type owner: str
 
     :rtype: None
     """
