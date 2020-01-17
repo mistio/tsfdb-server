@@ -24,6 +24,6 @@ COPY . /usr/src/app
 
 EXPOSE 8080
 
-ENTRYPOINT ["python3"]
+ENTRYPOINT [ "uwsgi" ]
 
-CMD ["-m", "tsfdb_server_v1"]
+CMD ["--plugins", "python3", "--http" "0.0.0.0:8080", "--enable-threads", "--wsgi-file", "tsfdb_server_v1/__main__.py", "--callable", "application", "--master", "--processes", "3", "--threads", "2"]
