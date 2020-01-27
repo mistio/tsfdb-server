@@ -321,15 +321,17 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
             all_metrics = find_metrics(resource)
             if isinstance(all_metrics, Error):
                 return all_metrics
-            for candidate in all_metrics:
-                if re.match("^%s$" % regex_metric, candidate):
-                    metrics.append(candidate)
+            if regex_metric == "*":
+                metrics = [candidate for candidate in all_metrics]
+            else:
+                for candidate in all_metrics:
+                    if re.match("^%s$" % regex_metric, candidate):
+                        metrics.append(candidate)
             if len(metrics) == 0:
                 error_msg = (
-                    "No metrics for regex: \"%s\" where found", regex_metric
+                    "No metrics for regex: \"%s\" where found" % regex_metric
                 )
-                log.error(error_msg)
-                return Error(400, error_msg)
+                return error(400, str(error_msg, 'utf-8'))
         else:
             metrics = [metrics]
         current_data = get_data(resource, start, stop, metrics)
