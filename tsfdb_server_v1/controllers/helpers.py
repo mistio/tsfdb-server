@@ -331,7 +331,7 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
                 error_msg = (
                     "No metrics for regex: \"%s\" where found" % regex_metric
                 )
-                return error(400, str(error_msg, 'utf-8'))
+                return error(400, error_msg)
         else:
             metrics = [metrics]
         current_data = get_data(resource, start, stop, metrics)
