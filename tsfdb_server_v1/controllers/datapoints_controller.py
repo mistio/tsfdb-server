@@ -7,7 +7,7 @@ from RestrictedPython import safe_builtins
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
-from .helpers import fetch, deriv
+from .helpers import fetch, deriv, write
 
 log = logging.getLogger(__name__)
 
@@ -58,4 +58,5 @@ def write_datapoints(body, owner=None):  # noqa: E501
 
     :rtype: None
     """
-    return 'do some magic!'
+    body = str(body, 'utf8')
+    write(body)

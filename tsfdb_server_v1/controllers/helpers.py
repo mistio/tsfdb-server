@@ -1,12 +1,13 @@
 import fdb
 import fdb.tuple
-import datetime
+from datetime import datetime, timedelta
 import dateparser
 import re
 import numpy as np
 import logging
 
 from tsfdb_server_v1.models.error import Error  # noqa: E501
+from line_protocol_parser import parse_line
 
 fdb.api_version(620)
 
@@ -38,25 +39,25 @@ def create_key_tuple_day(dt, machine, metric):
 def create_timestamp_second(tuple_key):
     # The last 6 items of the tuple contain the date up to the second
     # (year, month, day, hour, minute, second)
-    return int(datetime.datetime(*tuple_key[-6:]).timestamp())
+    return int(datetime(*tuple_key[-6:]).timestamp())
 
 
 def create_timestamp_minute(tuple_key):
     # The last 5 items of the tuple contain the date up to the minute
     # (year, month, day, hour, minute)
-    return int(datetime.datetime(*tuple_key[-5:]).timestamp())
+    return int(datetime(*tuple_key[-5:]).timestamp())
 
 
 def create_timestamp_hour(tuple_key):
     # The last 4 items of the tuple contain the date up to the hour
     # (year, month, day, hour)
-    return int(datetime.datetime(*tuple_key[-4:]).timestamp())
+    return int(datetime(*tuple_key[-4:]).timestamp())
 
 
 def create_timestamp_day(tuple_key):
     # The last 3 items of the tuple contain the date up to the day
     # (year, month, day)
-    return int(datetime.datetime(*tuple_key[-3:]).timestamp())
+    return int(datetime(*tuple_key[-3:]).timestamp())
 
 
 def open_db():
@@ -80,7 +81,7 @@ def create_start_stop_key_tuples(
         # delta compensates for the range function of foundationdb which
         # for start, stop returns keys in [start, stop). We convert it to
         # the range [start, stop]
-        delta = datetime.timedelta(seconds=1)
+        delta = timedelta(seconds=1)
         return [
             monitoring.pack(create_key_tuple_second(start, machine, metric)),
             monitoring.pack(create_key_tuple_second(
@@ -89,7 +90,7 @@ def create_start_stop_key_tuples(
     # if time range is less than 2 days, we create the keys for getting the
     # summarizeddatapoints per minute
     elif time_range_in_hours <= 48:
-        delta = datetime.timedelta(minutes=1)
+        delta = timedelta(minutes=1)
         return [
             monitoring["metric_per_minute"].pack(
                 create_key_tuple_minute(start, machine, metric)
@@ -101,7 +102,7 @@ def create_start_stop_key_tuples(
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
     elif time_range_in_hours <= 1440:
-        delta = datetime.timedelta(hours=1)
+        delta = timedelta(hours=1)
         return [
             monitoring["metric_per_hour"].pack(
                 create_key_tuple_hour(start, machine, metric)
@@ -113,7 +114,7 @@ def create_start_stop_key_tuples(
     # if time range is more than 2 months, we create the keys for getting
     # the summarized datapoints per day
     else:
-        delta = datetime.timedelta(hours=24)
+        delta = timedelta(hours=24)
         return [
             monitoring["metric_per_day"].pack(
                 create_key_tuple_day(start, machine, metric)
@@ -165,7 +166,7 @@ def parse_start_stop_params(start, stop):
 
     #  set start/stop params if they do not exist
     if not start:
-        start = datetime.datetime.now() - datetime.timedelta(minutes=10)
+        start = datetime.now() - timedelta(minutes=10)
     else:
         # Convert "y" to "years" since dateparser doesn't support it
         # e.g. -2y => -2years
@@ -173,7 +174,7 @@ def parse_start_stop_params(start, stop):
         start = dateparser.parse(start)
 
     if not stop:
-        stop = datetime.datetime.now()
+        stop = datetime.now()
     else:
         stop = re.sub("y$", "years", stop)
         stop = dateparser.parse(stop)
@@ -359,3 +360,45 @@ def deriv(data):
             )
         ]
     return data
+
+
+@fdb.transactional
+def write_tuple(tr, monitoring, tuple, value):
+    tr[monitoring.pack(tuple)] = fdb.tuple.pack((value,))
+
+
+def generate_metric(line):
+    tags = line["tags"]
+    del tags["machine_id"]
+    del tags["host"]
+    metric = line["measurement"]
+    for tag, value in sorted(tags.items()):
+        metric += (".%s-%s" % (tag, value))
+    return metric.replace('/', '-')
+
+
+def write(data):
+    try:
+        db = open_db()
+        # Open the monitoring directory if it exists
+        if fdb.directory.exists(db, "monitoring"):
+            monitoring = fdb.directory.open(db, ("monitoring",))
+        else:
+            error_msg = "Monitoring directory doesn't exist."
+            return error(503, error_msg)
+        data = data.split('\n')
+        # We need this because all the lines end with a '\n'
+        if data[-1:] == '':
+            data.pop(-1)
+        for line in data:
+            if line == "":
+                continue
+            dict_line = parse_line(line)
+            machine = dict_line["tags"]["machine_id"]
+            metric = generate_metric(dict_line)
+            dt = datetime.fromtimestamp(int(str(dict_line["time"])[0:10]))
+            for field, value in dict_line["fields"].items():
+                write_tuple(db, monitoring, create_key_tuple_second(
+                    dt, machine, metric + "." + field), value)
+    except fdb.FDBError as err:
+        return error(503, str(err.description, 'utf-8'))

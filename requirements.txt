@@ -7,3 +7,4 @@ https://github.com/mistio/dateparser/archive/master.zip
 ipdb >= 0.12.2
 numpy >= 1.17.4
 RestrictedPython >= 5.0
+line-protocol-parser >= 1.0.1
