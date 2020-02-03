@@ -372,16 +372,24 @@ def update_metric(tr, available_metrics, metric):
 
 @fdb.transactional
 def write_lines(tr, monitoring, available_metrics, lines):
+    metrics = {}
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
+        if not metrics.get(machine):
+            machine_metrics = set()
+            for k, v in tr[available_metrics[machine].range()]:
+                data_tuple = available_metrics[machine].unpack(k)
+                machine_metrics.add(data_tuple[1])
+            metrics[machine] = machine_metrics
         metric = generate_metric(dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             write_tuple(tr, monitoring, create_key_tuple_second(
                 dt, machine, metric + "." + field), value)
-            update_metric(tr, available_metrics, (machine, type(
-                value).__name__, metric + "." + field))
+            if not (metric + "." + field) in metrics.get(machine):
+                update_metric(tr, available_metrics, (machine, type(
+                    value).__name__, metric + "." + field))
 
 
 def generate_metric(tags, metric):
