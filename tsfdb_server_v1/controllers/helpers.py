@@ -362,16 +362,24 @@ def deriv(data):
     return data
 
 
+def write_tuple(tr, monitoring, key, value):
+    tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
+
+
 @fdb.transactional
-def write_tuple(tr, monitoring, tuple, value):
-    tr[monitoring.pack(tuple)] = fdb.tuple.pack((value,))
+def write_lines(tr, monitoring, lines):
+    for line in lines:
+        dict_line = parse_line(line)
+        machine = dict_line["tags"]["machine_id"]
+        metric = generate_metric(dict_line["tags"], dict_line["measurement"])
+        dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
+        for field, value in dict_line["fields"].items():
+            write_tuple(tr, monitoring, create_key_tuple_second(
+                dt, machine, metric + "." + field), value)
 
 
-def generate_metric(line):
-    tags = line["tags"]
-    del tags["machine_id"]
-    del tags["host"]
-    metric = line["measurement"]
+def generate_metric(tags, metric):
+    del tags["machine_id"], tags["host"]
     for tag, value in sorted(tags.items()):
         metric += (".%s-%s" % (tag, value))
     return metric.replace('/', '-')
@@ -386,19 +394,10 @@ def write(data):
         else:
             error_msg = "Monitoring directory doesn't exist."
             return error(503, error_msg)
+        # Create a list of lines
         data = data.split('\n')
-        # We need this because all the lines end with a '\n'
-        if data[-1:] == '':
-            data.pop(-1)
-        for line in data:
-            if line == "":
-                continue
-            dict_line = parse_line(line)
-            machine = dict_line["tags"]["machine_id"]
-            metric = generate_metric(dict_line)
-            dt = datetime.fromtimestamp(int(str(dict_line["time"])[0:10]))
-            for field, value in dict_line["fields"].items():
-                write_tuple(db, monitoring, create_key_tuple_second(
-                    dt, machine, metric + "." + field), value)
+        # Get rid of all empty lines
+        data = [line for line in data if line != ""]
+        write_lines(db, monitoring, data)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'))
