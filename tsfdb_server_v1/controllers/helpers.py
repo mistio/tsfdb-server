@@ -141,15 +141,13 @@ def create_timestamp(time_range_in_hours, tuple_key):
     return timestamp
 
 
-def create_metric(data_tuple):
+def create_metric(metric):
     return {
-        data_tuple[1] +
-        "." +
-        data_tuple[2]: {
-            "id": data_tuple[1] + "." + data_tuple[2],
-            "name": data_tuple[1] + "." + data_tuple[2],
-            "column": data_tuple[1] + "." + data_tuple[2],
-            "measurement": data_tuple[1] + "." + data_tuple[2],
+        metric: {
+            "id": metric,
+            "name": metric,
+            "column": metric,
+            "measurement": metric,
             "max_value": None,
             "min_value": None,
             "priority": 0,
@@ -205,11 +203,11 @@ def is_regex(string):
 
 
 @fdb.transactional
-def get_metrics(tr, monitoring, resource):
+def get_metrics(tr, available_metrics, resource):
     metrics = {}
-    for k, v in tr[monitoring["available_metrics"][resource].range()]:
-        data_tuple = monitoring["available_metrics"][resource].unpack(k)
-        metrics.update(create_metric(data_tuple))
+    for k, v in tr[available_metrics[resource].range()]:
+        data_tuple = available_metrics[resource].unpack(k)
+        metrics.update(create_metric(data_tuple[1]))
 
     return metrics
 
@@ -217,13 +215,14 @@ def get_metrics(tr, monitoring, resource):
 def find_metrics(resource):
     try:
         db = open_db()
-        if fdb.directory.exists(db, "monitoring"):
-            monitoring = fdb.directory.open(db, "monitoring")
+        if fdb.directory.exists(db, ('monitoring', 'available_metrics')):
+            available_metrics = fdb.directory.open(
+                db, ('monitoring', 'available_metrics'))
         else:
             error_msg = "Monitoring directory doesn't exist."
             return error(503, error_msg)
 
-        return get_metrics(db, monitoring, resource)
+        return get_metrics(db, available_metrics, resource)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'))
 
@@ -366,8 +365,13 @@ def write_tuple(tr, monitoring, key, value):
     tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
 
 
+def update_metric(tr, available_metrics, metric):
+    if not tr[available_metrics.pack(metric)].present():
+        tr[available_metrics.pack(metric)] = fdb.tuple.pack(("",))
+
+
 @fdb.transactional
-def write_lines(tr, monitoring, lines):
+def write_lines(tr, monitoring, available_metrics, lines):
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
@@ -376,6 +380,8 @@ def write_lines(tr, monitoring, lines):
         for field, value in dict_line["fields"].items():
             write_tuple(tr, monitoring, create_key_tuple_second(
                 dt, machine, metric + "." + field), value)
+            update_metric(tr, available_metrics, (machine, type(
+                value).__name__, metric + "." + field))
 
 
 def generate_metric(tags, metric):
@@ -388,16 +394,13 @@ def generate_metric(tags, metric):
 def write(data):
     try:
         db = open_db()
-        # Open the monitoring directory if it exists
-        if fdb.directory.exists(db, "monitoring"):
-            monitoring = fdb.directory.open(db, ("monitoring",))
-        else:
-            error_msg = "Monitoring directory doesn't exist."
-            return error(503, error_msg)
+        monitoring = fdb.directory.create_or_open(db, ('monitoring',))
+        available_metrics = monitoring.create_or_open(
+            db, ('available_metrics',))
         # Create a list of lines
         data = data.split('\n')
         # Get rid of all empty lines
         data = [line for line in data if line != ""]
-        write_lines(db, monitoring, data)
+        write_lines(db, monitoring, available_metrics, data)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'))
