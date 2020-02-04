@@ -377,11 +377,8 @@ def write_lines(tr, monitoring, available_metrics, lines):
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
         if not metrics.get(machine):
-            machine_metrics = set()
-            for k, v in tr[available_metrics[machine].range()]:
-                data_tuple = available_metrics[machine].unpack(k)
-                machine_metrics.add(data_tuple[1])
-            metrics[machine] = machine_metrics
+            machine_metrics = get_metrics(tr, available_metrics, machine)
+            metrics[machine] = {m for m in machine_metrics.keys()}
         metric = generate_metric(dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
