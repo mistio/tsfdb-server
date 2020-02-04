@@ -73,7 +73,7 @@ def error(code, error_msg):
 
 
 def create_start_stop_key_tuples(
-    time_range_in_hours, monitoring, machine, metric, start, stop
+    db, time_range_in_hours, monitoring, machine, metric, start, stop
 ):
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
@@ -91,11 +91,16 @@ def create_start_stop_key_tuples(
     # summarizeddatapoints per minute
     elif time_range_in_hours <= 48:
         delta = timedelta(minutes=1)
+        if monitoring.exists(db, "metric_per_minute"):
+            monitoring_sum = monitoring.open(db, ("metric_per_minute",))
+        else:
+            error_msg = "metric_per_minute directory doesn't exist."
+            return error(503, error_msg)
         return [
-            monitoring["metric_per_minute"].pack(
+            monitoring_sum.pack(
                 create_key_tuple_minute(start, machine, metric)
             ),
-            monitoring["metric_per_minute"].pack(
+            monitoring_sum.pack(
                 create_key_tuple_minute(stop + delta, machine, metric)
             ),
         ]
@@ -103,11 +108,16 @@ def create_start_stop_key_tuples(
     # the summarized datapoints per hour
     elif time_range_in_hours <= 1440:
         delta = timedelta(hours=1)
+        if monitoring.exists(db, "metric_per_hour"):
+            monitoring_sum = monitoring.open(db, ("metric_per_hour",))
+        else:
+            error_msg = "metric_per_hour directory doesn't exist."
+            return error(503, error_msg)
         return [
-            monitoring["metric_per_hour"].pack(
+            monitoring_sum.pack(
                 create_key_tuple_hour(start, machine, metric)
             ),
-            monitoring["metric_per_hour"].pack(
+            monitoring_sum.pack(
                 create_key_tuple_hour(stop + delta, machine, metric)
             ),
         ]
@@ -115,11 +125,16 @@ def create_start_stop_key_tuples(
     # the summarized datapoints per day
     else:
         delta = timedelta(hours=24)
+        if monitoring.exists(db, "metric_per_day"):
+            monitoring_sum = monitoring.open(db, ("metric_per_day",))
+        else:
+            error_msg = "metric_per_day directory doesn't exist."
+            return error(503, error_msg)
         return [
-            monitoring["metric_per_day"].pack(
+            monitoring_sum.pack(
                 create_key_tuple_day(start, machine, metric)
             ),
-            monitoring["metric_per_day"].pack(
+            monitoring_sum.pack(
                 create_key_tuple_day(stop + delta, machine, metric)
             ),
         ]
@@ -284,12 +299,15 @@ def get_data(resource, start, stop, metrics):
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
         for metric in metrics:
-            (
-                key_timestamp_start,
-                key_timestamp_stop,
-            ) = create_start_stop_key_tuples(
-                time_range_in_hours, monitoring, resource, metric, start, stop
+            tuples = create_start_stop_key_tuples(
+                db, time_range_in_hours, monitoring,
+                resource, metric, start, stop
             )
+
+            if isinstance(tuples, Error):
+                return tuples
+
+            key_timestamp_start, key_timestamp_stop = tuples
 
             datapoints = get_datapoints(
                 db, key_timestamp_start, key_timestamp_stop,
@@ -370,8 +388,39 @@ def update_metric(tr, available_metrics, metric):
         tr[available_metrics.pack(metric)] = fdb.tuple.pack(("",))
 
 
+def create_summarized_tuple(machine, metric, dt, resolution):
+    if resolution == "minute":
+        return create_key_tuple_minute(dt, machine, metric)
+    elif resolution == "hour":
+        return create_key_tuple_hour(dt, machine, metric)
+    else:
+        return create_key_tuple_day(dt, machine, metric)
+
+
+def apply_summarization(tr, monitoring, machine,
+                        metric, dt, value, resolutions):
+    for resolution in resolutions:
+        monitoring_time = monitoring.create_or_open(
+            tr, ('metric_per_' + resolution,))
+        sum_tuple = tr[monitoring_time.pack(
+            create_summarized_tuple(machine, metric, dt, resolution))]
+        if sum_tuple.present():
+            sum_tuple = fdb.tuple.unpack(sum_tuple)
+            sum_value, count, min_value, max_value = sum_tuple
+            sum_value += value
+            count += 1
+            min_value = min(value, min_value)
+            max_value = max(value, max_value)
+        else:
+            sum_value, count, min_value, max_value = value, 1, value, value
+        tr[monitoring_time.pack(
+            create_summarized_tuple(machine, metric, dt, resolution))] = \
+            fdb.tuple.pack((sum_value, count, min_value, max_value))
+
+
 @fdb.transactional
 def write_lines(tr, monitoring, available_metrics, lines):
+    resolutions = ("minute", "hour", "day")
     metrics = {}
     for line in lines:
         dict_line = parse_line(line)
@@ -382,11 +431,14 @@ def write_lines(tr, monitoring, available_metrics, lines):
         metric = generate_metric(dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
+            machine_metric = "%s.%s" % (metric, field)
             write_tuple(tr, monitoring, create_key_tuple_second(
-                dt, machine, metric + "." + field), value)
-            if not (metric + "." + field) in metrics.get(machine):
+                dt, machine, machine_metric), value)
+            if not (machine_metric in metrics.get(machine)):
                 update_metric(tr, available_metrics, (machine, type(
-                    value).__name__, metric + "." + field))
+                    value).__name__, machine_metric))
+            apply_summarization(tr, monitoring, machine,
+                                machine_metric, dt, value, resolutions)
 
 
 def generate_metric(tags, metric):
