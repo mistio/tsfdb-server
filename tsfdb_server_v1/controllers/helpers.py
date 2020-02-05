@@ -398,10 +398,9 @@ def create_summarized_tuple(machine, metric, dt, resolution):
 
 
 def apply_summarization(tr, monitoring, machine,
-                        metric, dt, value, resolutions):
+                        metric, dt, value, resolutions, resolutions_dirs):
     for resolution in resolutions:
-        monitoring_time = monitoring.create_or_open(
-            tr, ('metric_per_' + resolution,))
+        monitoring_time = resolutions_dirs[resolution]
         sum_tuple = tr[monitoring_time.pack(
             create_summarized_tuple(machine, metric, dt, resolution))]
         if sum_tuple.present():
@@ -421,6 +420,10 @@ def apply_summarization(tr, monitoring, machine,
 @fdb.transactional
 def write_lines(tr, monitoring, available_metrics, lines):
     resolutions = ("minute", "hour", "day")
+    resolutions_dirs = {}
+    for resolution in resolutions:
+        resolutions_dirs[resolution] = monitoring.create_or_open(
+            tr, ('metric_per_' + resolution,))
     metrics = {}
     for line in lines:
         dict_line = parse_line(line)
@@ -438,7 +441,8 @@ def write_lines(tr, monitoring, available_metrics, lines):
                 update_metric(tr, available_metrics, (machine, type(
                     value).__name__, machine_metric))
             apply_summarization(tr, monitoring, machine,
-                                machine_metric, dt, value, resolutions)
+                                machine_metric, dt, value,
+                                resolutions, resolutions_dirs)
 
 
 def generate_metric(tags, metric):
