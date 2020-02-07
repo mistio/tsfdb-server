@@ -16,7 +16,7 @@ from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1.test import BaseTestCase
 from tsfdb_server_v1.controllers.helpers import create_key_tuple_second, \
     create_key_tuple_minute, create_key_tuple_hour, create_key_tuple_day
-from tsfdb_server_v1.test.helpers import test_aggregation
+from tsfdb_server_v1.test.helpers import validate_aggregation
 
 fdb.api_version(620)
 
@@ -69,7 +69,7 @@ class TestDatapointsController(BaseTestCase):
                     data=body)
                 self.assertStatus(response, 204, message=None)
                 body = ""
-        test_aggregation(timestamp, stop)
+        validate_aggregation(timestamp, stop)
 
         # Test aggregation with random values
 
@@ -89,7 +89,7 @@ class TestDatapointsController(BaseTestCase):
                 self.assertStatus(response, 204, message=None)
                 body = ""
 
-        test_aggregation(timestamp, stop)
+        validate_aggregation(timestamp, stop)
 
         # Test writing the same key with the same value
 

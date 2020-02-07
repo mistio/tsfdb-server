@@ -6,7 +6,7 @@ from tsfdb_server_v1.controllers.helpers import create_key_tuple_second, \
 fdb.api_version(620)
 
 
-def test_aggregation(start, stop):
+def validate_aggregation(start, stop):
     db = fdb.open()
     if fdb.directory.exists(db, "monitoring"):
         monitoring = fdb.directory.open(db, "monitoring")
