@@ -395,7 +395,15 @@ def deriv(data):
 
 
 def write_tuple(tr, monitoring, key, value):
-    tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
+    if not tr[monitoring.pack(key)].present():
+        tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
+        return True
+    saved_value = fdb.tuple.unpack(tr[monitoring.pack(key)])[0]
+    if saved_value != value:
+        log.error("key: %s already exists with a different value" % str(key))
+    else:
+        log.warning("key: %s already exists with the same value" % str(key))
+    return False
 
 
 def update_metric(tr, available_metrics, metric):
@@ -478,7 +486,7 @@ def write_lines(tr, monitoring, available_metrics, lines):
     resolutions_dirs = {}
     resolutions_options = {"minute": aggregate_minute,
                            "hour": aggregate_hour, "day": aggregate_day}
-    log.error(resolutions_options)
+    # log.error(resolutions_options)
     for resolution in resolutions:
         resolutions_dirs[resolution] = monitoring.create_or_open(
             tr, ('metric_per_' + resolution,))
@@ -493,19 +501,20 @@ def write_lines(tr, monitoring, available_metrics, lines):
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
-            write_tuple(tr, monitoring, create_key_tuple_second(
-                dt, machine, machine_metric), value)
-            if not (machine_metric in metrics.get(machine)):
-                update_metric(tr, available_metrics, (machine, type(
-                    value).__name__, machine_metric))
-            apply_summarization(tr, monitoring, machine,
-                                machine_metric, dt, value,
-                                resolutions, resolutions_dirs,
-                                resolutions_options)
+            if write_tuple(tr, monitoring, create_key_tuple_second(
+                    dt, machine, machine_metric), value):
+                if not (machine_metric in metrics.get(machine)):
+                    update_metric(tr, available_metrics, (machine, type(
+                        value).__name__, machine_metric))
+                apply_summarization(tr, monitoring, machine,
+                                    machine_metric, dt, value,
+                                    resolutions, resolutions_dirs,
+                                    resolutions_options)
 
 
 def generate_metric(tags, metric):
-    del tags["machine_id"], tags["host"]
+    tags.pop("machine_id", None)
+    tags.pop("host", None)
     for tag, value in sorted(tags.items()):
         metric += (".%s-%s" % (tag, value))
     return metric.replace('/', '-')
