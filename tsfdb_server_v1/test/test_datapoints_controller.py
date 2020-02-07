@@ -101,6 +101,8 @@ class TestDatapointsController(BaseTestCase):
             data=body)
         self.assertStatus(response, 204, message=None)
 
+        del db[b'':b'\xff']
+
 
 if __name__ == '__main__':
     unittest.main()
