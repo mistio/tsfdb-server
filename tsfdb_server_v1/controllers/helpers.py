@@ -471,11 +471,31 @@ def write_lines(tr, monitoring, available_metrics, lines):
                                 resolutions, resolutions_dirs)
 
 
-def generate_metric(tags, metric):
+def generate_metric(tags, measurement):
     del tags["machine_id"], tags["host"]
-    for tag, value in sorted(tags.items()):
-        metric += (".%s-%s" % (tag, value))
-    return metric.replace('/', '-')
+    metric = measurement
+    # First sort the tags in alphanumeric order
+    tags = sorted(tags.items())
+    # Then promote the tags which have the same name as the measurement
+    tags = sorted(tags, key=lambda item: item[0] == measurement, reverse=True)
+    for tag, value in tags:
+        processed_tag = tag.replace(measurement, '')
+        processed_value = value.replace(measurement, '')
+        # Ignore the tag if it is empty
+        if processed_tag:
+            metric += (".%s" % processed_tag)
+        # Ignore the value if it is empty
+        if processed_value and processed_tag:
+            metric += ("-%s" % processed_value)
+        # Accomodate for the possibility
+        # that there is a value with an empty tag
+        elif processed_value:
+            metric += (".%s" % processed_value)
+
+    metric = metric.replace('/', '-')
+    metric = metric.replace('.-', '.')
+    metric = re.sub(r'\.+', ".", metric)
+    return metric
 
 
 def write(data):
