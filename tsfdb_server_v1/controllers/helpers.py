@@ -5,6 +5,7 @@ import dateparser
 import re
 import numpy as np
 import logging
+import os
 
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from line_protocol_parser import parse_line
@@ -12,6 +13,20 @@ from line_protocol_parser import parse_line
 fdb.api_version(620)
 
 log = logging.getLogger(__name__)
+
+aggregate_minute = os.getenv('AGGREGATE_MINUTE', 1)
+aggregate_hour = os.getenv('AGGREGATE_HOUR', 1)
+aggregate_day = os.getenv('AGGREGATE_DAY', 1)
+
+#aggregate_minute = 1
+#aggregate_hour = 2
+#aggregate_day = 2
+
+
+def print_aggregate_options():
+    print(("aggregate_minute: %s" % aggregate_minute))
+    print(("aggregate_hour: %s" % aggregate_hour))
+    print(("aggregate_day: %s" % aggregate_day))
 
 
 def create_key_tuple_second(dt, machine, metric):
@@ -406,7 +421,15 @@ def deriv(data):
 
 
 def write_tuple(tr, monitoring, key, value):
-    tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
+    if not tr[monitoring.pack(key)].present():
+        tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
+        return True
+    saved_value = fdb.tuple.unpack(tr[monitoring.pack(key)])[0]
+    if saved_value != value:
+        log.error("key: %s already exists with a different value" % str(key))
+    else:
+        log.warning("key: %s already exists with the same value" % str(key))
+    return False
 
 
 def update_metric(tr, available_metrics, metric):
@@ -423,30 +446,73 @@ def create_summarized_tuple(machine, metric, dt, resolution):
         return create_key_tuple_day(dt, machine, metric)
 
 
+def decrement_time(dt, resolution):
+    if resolution == "minute":
+        return dt - timedelta(minutes=1)
+    elif resolution == "hour":
+        return dt - timedelta(hours=1)
+    else:
+        return dt - timedelta(days=1)
+
+
 def apply_summarization(tr, monitoring, machine,
-                        metric, dt, value, resolutions, resolutions_dirs):
+                        metric, dt, value, resolutions, resolutions_dirs,
+                        resolutions_options):
+    new_aggregation = False
+    last_tuple = None
+    last_dt = None
     for resolution in resolutions:
+        if resolutions_options[resolution] == 0 or \
+                (resolutions_options[resolution] == 2 and
+                 not new_aggregation):
+            continue
+        if resolutions_options[resolution] == 2:
+            sum_dt = last_dt
+        else:
+            sum_dt = dt
         monitoring_time = resolutions_dirs[resolution]
         sum_tuple = tr[monitoring_time.pack(
-            create_summarized_tuple(machine, metric, dt, resolution))]
+            create_summarized_tuple(machine, metric, sum_dt, resolution))]
         if sum_tuple.present():
             sum_tuple = fdb.tuple.unpack(sum_tuple)
             sum_value, count, min_value, max_value = sum_tuple
-            sum_value += value
-            count += 1
-            min_value = min(value, min_value)
-            max_value = max(value, max_value)
+            new_aggregation = False
+            if resolutions_options[resolution] == 2:
+                last_tuple = fdb.tuple.unpack(last_tuple)
+                last_sum_value, last_count, last_min_value, last_max_value \
+                    = last_tuple
+                sum_value += last_sum_value
+                count += last_count
+                min_value = min(last_min_value, min_value)
+                max_value = max(last_max_value, max_value)
+            else:
+                sum_value += value
+                count += 1
+                min_value = min(value, min_value)
+                max_value = max(value, max_value)
         else:
-            sum_value, count, min_value, max_value = value, 1, value, value
+            if resolutions_options[resolution] == 2:
+                last_tuple = fdb.tuple.unpack(last_tuple)
+                sum_value, count, min_value, max_value \
+                    = last_tuple
+            else:
+                sum_value, count, min_value, max_value = value, 1, value, value
+            last_dt = decrement_time(dt, resolution)
+            last_tuple = tr[monitoring_time.pack(
+                create_summarized_tuple(machine, metric, last_dt, resolution))]
+            new_aggregation = last_tuple.present()
         tr[monitoring_time.pack(
-            create_summarized_tuple(machine, metric, dt, resolution))] = \
-            fdb.tuple.pack((sum_value, count, min_value, max_value))
+            create_summarized_tuple(machine, metric, sum_dt, resolution))] \
+            = fdb.tuple.pack((sum_value, count, min_value, max_value))
 
 
 @fdb.transactional
 def write_lines(tr, monitoring, available_metrics, lines):
     resolutions = ("minute", "hour", "day")
     resolutions_dirs = {}
+    resolutions_options = {"minute": aggregate_minute,
+                           "hour": aggregate_hour, "day": aggregate_day}
+    # log.error(resolutions_options)
     for resolution in resolutions:
         resolutions_dirs[resolution] = monitoring.create_or_open(
             tr, ('metric_per_' + resolution,))
@@ -461,14 +527,15 @@ def write_lines(tr, monitoring, available_metrics, lines):
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
-            write_tuple(tr, monitoring, create_key_tuple_second(
-                dt, machine, machine_metric), value)
-            if not (machine_metric in metrics.get(machine)):
-                update_metric(tr, available_metrics, (machine, type(
-                    value).__name__, machine_metric))
-            apply_summarization(tr, monitoring, machine,
-                                machine_metric, dt, value,
-                                resolutions, resolutions_dirs)
+            if write_tuple(tr, monitoring, create_key_tuple_second(
+                    dt, machine, machine_metric), value):
+                if not (machine_metric in metrics.get(machine)):
+                    update_metric(tr, available_metrics, (machine, type(
+                        value).__name__, machine_metric))
+                apply_summarization(tr, monitoring, machine,
+                                    machine_metric, dt, value,
+                                    resolutions, resolutions_dirs,
+                                    resolutions_options)
 
 
 def generate_metric(tags, measurement):
