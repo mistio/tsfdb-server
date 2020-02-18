@@ -29,19 +29,19 @@ def print_aggregate_options():
     print(("aggregate_day: %s" % aggregate_day))
 
 
-def create_key_tuple_second(dt, machine, metric):
-    return create_key_tuple_minute(dt, machine, metric) + (dt.second,)
+def key_tuple_second(dt, machine, metric):
+    return key_tuple_minute(dt, machine, metric) + (dt.second,)
 
 
-def create_key_tuple_minute(dt, machine, metric):
-    return create_key_tuple_hour(dt, machine, metric) + (dt.minute,)
+def key_tuple_minute(dt, machine, metric):
+    return key_tuple_hour(dt, machine, metric) + (dt.minute,)
 
 
-def create_key_tuple_hour(dt, machine, metric):
-    return create_key_tuple_day(dt, machine, metric) + (dt.hour,)
+def key_tuple_hour(dt, machine, metric):
+    return key_tuple_day(dt, machine, metric) + (dt.hour,)
 
 
-def create_key_tuple_day(dt, machine, metric):
+def key_tuple_day(dt, machine, metric):
     return (
         machine,
         metric,
@@ -49,30 +49,6 @@ def create_key_tuple_day(dt, machine, metric):
         dt.month,
         dt.day,
     )
-
-
-def create_timestamp_second(tuple_key):
-    # The last 6 items of the tuple contain the date up to the second
-    # (year, month, day, hour, minute, second)
-    return int(datetime(*tuple_key[-6:]).timestamp())
-
-
-def create_timestamp_minute(tuple_key):
-    # The last 5 items of the tuple contain the date up to the minute
-    # (year, month, day, hour, minute)
-    return int(datetime(*tuple_key[-5:]).timestamp())
-
-
-def create_timestamp_hour(tuple_key):
-    # The last 4 items of the tuple contain the date up to the hour
-    # (year, month, day, hour)
-    return int(datetime(*tuple_key[-4:]).timestamp())
-
-
-def create_timestamp_day(tuple_key):
-    # The last 3 items of the tuple contain the date up to the day
-    # (year, month, day)
-    return int(datetime(*tuple_key[-3:]).timestamp())
 
 
 def round_base(x, precision, base):
@@ -113,7 +89,7 @@ def error(code, error_msg):
     return Error(code, error_msg)
 
 
-def create_start_stop_key_tuples(
+def start_stop_key_tuples(
     db, time_range_in_hours, monitoring, machine, metric, start, stop
 ):
     # if time range is less than an hour, we create the keys for getting the
@@ -124,8 +100,8 @@ def create_start_stop_key_tuples(
         # the range [start, stop]
         delta = timedelta(seconds=1)
         return [
-            monitoring.pack(create_key_tuple_second(start, machine, metric)),
-            monitoring.pack(create_key_tuple_second(
+            monitoring.pack(key_tuple_second(start, machine, metric)),
+            monitoring.pack(key_tuple_second(
                 stop + delta, machine, metric)),
         ]
     # if time range is less than 2 days, we create the keys for getting the
@@ -139,10 +115,10 @@ def create_start_stop_key_tuples(
             return error(503, error_msg)
         return [
             monitoring_sum.pack(
-                create_key_tuple_minute(start, machine, metric)
+                key_tuple_minute(start, machine, metric)
             ),
             monitoring_sum.pack(
-                create_key_tuple_minute(stop + delta, machine, metric)
+                key_tuple_minute(stop + delta, machine, metric)
             ),
         ]
     # if time range is less than 2 months, we create the keys for getting
@@ -156,10 +132,10 @@ def create_start_stop_key_tuples(
             return error(503, error_msg)
         return [
             monitoring_sum.pack(
-                create_key_tuple_hour(start, machine, metric)
+                key_tuple_hour(start, machine, metric)
             ),
             monitoring_sum.pack(
-                create_key_tuple_hour(stop + delta, machine, metric)
+                key_tuple_hour(stop + delta, machine, metric)
             ),
         ]
     # if time range is more than 2 months, we create the keys for getting
@@ -173,31 +149,37 @@ def create_start_stop_key_tuples(
             return error(503, error_msg)
         return [
             monitoring_sum.pack(
-                create_key_tuple_day(start, machine, metric)
+                key_tuple_day(start, machine, metric)
             ),
             monitoring_sum.pack(
-                create_key_tuple_day(stop + delta, machine, metric)
+                key_tuple_day(stop + delta, machine, metric)
             ),
         ]
 
 
-def create_timestamp(time_range_in_hours, tuple_key):
+def tuple_to_timestamp(time_range_in_hours, tuple_key):
     # if time range is less than an hour, we create the timestamp per second
+    # The last 6 items of the tuple contain the date up to the second
+    # (year, month, day, hour, minute, second)
     if time_range_in_hours <= 1:
-        timestamp = create_timestamp_second(tuple_key)
+        return int(datetime(*tuple_key[-6:]).timestamp())
     # if time range is less than 2 days, we create the timestamp per minute
-    elif time_range_in_hours <= 48:
-        timestamp = create_timestamp_minute(tuple_key)
+    # The last 5 items of the tuple contain the date up to the minute
+    # (year, month, day, hour, minute)
+    if time_range_in_hours <= 48:
+        return int(datetime(*tuple_key[-5:]).timestamp())
     # if time range is less than 2 months, we create the timestamp per hour
-    elif time_range_in_hours <= 1440:
-        timestamp = create_timestamp_hour(tuple_key)
+    # The last 4 items of the tuple contain the date up to the hour
+    # (year, month, day, hour)
+    if time_range_in_hours <= 1440:
+        return int(datetime(*tuple_key[-4:]).timestamp())
     # if time range is more than 2 months, we create the timestamp per day
-    else:
-        timestamp = create_timestamp_day(tuple_key)
-    return timestamp
+    # The last 3 items of the tuple contain the date up to the day
+    # (year, month, day)
+    return int(datetime(*tuple_key[-3:]).timestamp())
 
 
-def create_metric(metric):
+def metric_to_dict(metric):
     return {
         metric: {
             "id": metric,
@@ -240,18 +222,17 @@ def parse_start_stop_params(start, stop):
     return start, stop
 
 
-def create_datapoint(time_range_in_hours, tuple_value, tuple_key):
-    timestamp = create_timestamp(time_range_in_hours, tuple_key)
+def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key):
+    timestamp = tuple_to_timestamp(time_range_in_hours, tuple_key)
     # if the range is less than an hour, we create the appropriate
     # datapoint [value, timestamp]
     if time_range_in_hours <= 1:
         return [tuple_value[0], timestamp]
     # else we need to use the summarized values [sum, count, min, max]
     # and convert them to a datapoint [value, timestamp]
-    else:
-        sum_values = tuple_value[0]
-        count = tuple_value[1]
-        return [sum_values / count, timestamp]
+    sum_values = tuple_value[0]
+    count = tuple_value[1]
+    return [sum_values / count, timestamp]
 
 
 def is_regex(string):
@@ -259,11 +240,11 @@ def is_regex(string):
 
 
 @fdb.transactional
-def get_metrics(tr, available_metrics, resource):
+def find_metrics_from_db(tr, available_metrics, resource):
     metrics = {}
     for k, v in tr[available_metrics[resource].range()]:
         data_tuple = available_metrics[resource].unpack(k)
-        metrics.update(create_metric(data_tuple[1]))
+        metrics.update(metric_to_dict(data_tuple[1]))
 
     return metrics
 
@@ -278,13 +259,13 @@ def find_metrics(resource):
             error_msg = "Monitoring directory doesn't exist."
             return error(503, error_msg)
 
-        return get_metrics(db, available_metrics, resource)
+        return find_metrics_from_db(db, available_metrics, resource)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'))
 
 
 @fdb.transactional
-def get_resources(tr, monitoring, regex_resources):
+def find_resources_from_db(tr, monitoring, regex_resources):
     resources = []
     for k, v in tr[monitoring["available_resources"].range()]:
         candidate = monitoring["available_resources"].unpack(k)
@@ -299,7 +280,7 @@ def find_resources(regex_resources):
         db = open_db()
         if fdb.directory.exists(db, "monitoring"):
             monitoring = fdb.directory.open(db, "monitoring")
-            return get_resources(db, monitoring, regex_resources)
+            return find_resources_from_db(db, monitoring, regex_resources)
 
         else:
             error_msg = "Monitoring directory doesn't exist."
@@ -309,7 +290,7 @@ def find_resources(regex_resources):
 
 
 @fdb.transactional
-def get_datapoints(tr, start, stop, time_range_in_hours):
+def find_datapoints_from_db(tr, start, stop, time_range_in_hours):
     datapoints = []
     for k, v in tr[start:stop]:
 
@@ -317,14 +298,14 @@ def get_datapoints(tr, start, stop, time_range_in_hours):
         tuple_value = list(fdb.tuple.unpack(v))
 
         datapoints.append(
-            create_datapoint(
+            tuple_to_datapoint(
                 time_range_in_hours, tuple_value, tuple_key
             )
         )
     return datapoints
 
 
-def get_data(resource, start, stop, metrics):
+def find_datapoints(resource, start, stop, metrics):
     try:
         db = open_db()
         data = {}
@@ -340,7 +321,7 @@ def get_data(resource, start, stop, metrics):
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
         for metric in metrics:
-            tuples = create_start_stop_key_tuples(
+            tuples = start_stop_key_tuples(
                 db, time_range_in_hours, monitoring,
                 resource, metric, start, stop
             )
@@ -350,7 +331,7 @@ def get_data(resource, start, stop, metrics):
 
             key_timestamp_start, key_timestamp_stop = tuples
 
-            datapoints = get_datapoints(
+            datapoints = find_datapoints_from_db(
                 db, key_timestamp_start, key_timestamp_stop,
                 time_range_in_hours)
 
@@ -393,7 +374,7 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
                 return error(400, error_msg)
         else:
             metrics = [metrics]
-        current_data = get_data(resource, start, stop, metrics)
+        current_data = find_datapoints(resource, start, stop, metrics)
         if isinstance(current_data, Error):
             return current_data
         data.update(current_data)
@@ -437,13 +418,12 @@ def update_metric(tr, available_metrics, metric):
         tr[available_metrics.pack(metric)] = fdb.tuple.pack(("",))
 
 
-def create_summarized_tuple(machine, metric, dt, resolution):
+def time_aggregate_tuple(machine, metric, dt, resolution):
     if resolution == "minute":
-        return create_key_tuple_minute(dt, machine, metric)
+        return key_tuple_minute(dt, machine, metric)
     elif resolution == "hour":
-        return create_key_tuple_hour(dt, machine, metric)
-    else:
-        return create_key_tuple_day(dt, machine, metric)
+        return key_tuple_hour(dt, machine, metric)
+    return key_tuple_day(dt, machine, metric)
 
 
 def decrement_time(dt, resolution):
@@ -451,13 +431,12 @@ def decrement_time(dt, resolution):
         return dt - timedelta(minutes=1)
     elif resolution == "hour":
         return dt - timedelta(hours=1)
-    else:
-        return dt - timedelta(days=1)
+    return dt - timedelta(days=1)
 
 
-def apply_summarization(tr, monitoring, machine,
-                        metric, dt, value, resolutions, resolutions_dirs,
-                        resolutions_options):
+def apply_time_aggregation(tr, monitoring, machine,
+                           metric, dt, value, resolutions, resolutions_dirs,
+                           resolutions_options):
     new_aggregation = False
     last_tuple = None
     last_dt = None
@@ -472,7 +451,7 @@ def apply_summarization(tr, monitoring, machine,
             sum_dt = dt
         monitoring_time = resolutions_dirs[resolution]
         sum_tuple = tr[monitoring_time.pack(
-            create_summarized_tuple(machine, metric, sum_dt, resolution))]
+            time_aggregate_tuple(machine, metric, sum_dt, resolution))]
         if sum_tuple.present():
             sum_tuple = fdb.tuple.unpack(sum_tuple)
             sum_value, count, min_value, max_value = sum_tuple
@@ -499,10 +478,10 @@ def apply_summarization(tr, monitoring, machine,
                 sum_value, count, min_value, max_value = value, 1, value, value
             last_dt = decrement_time(dt, resolution)
             last_tuple = tr[monitoring_time.pack(
-                create_summarized_tuple(machine, metric, last_dt, resolution))]
+                time_aggregate_tuple(machine, metric, last_dt, resolution))]
             new_aggregation = last_tuple.present()
         tr[monitoring_time.pack(
-            create_summarized_tuple(machine, metric, sum_dt, resolution))] \
+            time_aggregate_tuple(machine, metric, sum_dt, resolution))] \
             = fdb.tuple.pack((sum_value, count, min_value, max_value))
 
 
@@ -521,21 +500,22 @@ def write_lines(tr, monitoring, available_metrics, lines):
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
         if not metrics.get(machine):
-            machine_metrics = get_metrics(tr, available_metrics, machine)
+            machine_metrics = find_metrics_from_db(
+                tr, available_metrics, machine)
             metrics[machine] = {m for m in machine_metrics.keys()}
         metric = generate_metric(dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
-            if write_tuple(tr, monitoring, create_key_tuple_second(
+            if write_tuple(tr, monitoring, key_tuple_second(
                     dt, machine, machine_metric), value):
                 if not (machine_metric in metrics.get(machine)):
                     update_metric(tr, available_metrics, (machine, type(
                         value).__name__, machine_metric))
-                apply_summarization(tr, monitoring, machine,
-                                    machine_metric, dt, value,
-                                    resolutions, resolutions_dirs,
-                                    resolutions_options)
+                apply_time_aggregation(tr, monitoring, machine,
+                                       machine_metric, dt, value,
+                                       resolutions, resolutions_dirs,
+                                       resolutions_options)
 
 
 def generate_metric(tags, measurement):
