@@ -7,7 +7,7 @@ from RestrictedPython import safe_builtins
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
-from .helpers import fetch, deriv, write
+from .helpers import fetch, deriv, write, roundX, roundY
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,8 @@ def fetch_datapoints(query):  # noqa: E501
     """
 
     allowed_funcs = {'__builtins__': safe_builtins,
-                     "fetch": fetch, "deriv": deriv}
+                     "fetch": fetch, "deriv": deriv, "roundX": roundX,
+                     "roundY": roundY}
     try:
         byte_code = compile_restricted(
             query,
@@ -36,7 +37,8 @@ def fetch_datapoints(query):  # noqa: E501
         log.error("Error when parsing query: %s, error: %s", query, str(e))
         return Error(400, "Bad request")
 
-    funcs = {"fetch": fetch, "deriv": deriv}
+    funcs = {"fetch": fetch, "deriv": deriv, "roundX": roundX,
+             "roundY": roundY}
     code = compile(query, "query", "eval")
     data = eval(code, funcs)
 

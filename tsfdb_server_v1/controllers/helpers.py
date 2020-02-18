@@ -75,6 +75,32 @@ def create_timestamp_day(tuple_key):
     return int(datetime(*tuple_key[-3:]).timestamp())
 
 
+def round_base(x, precision, base):
+    return round(base * round(float(x)/base), precision)
+
+
+def roundX(data, precision=0, base=1):
+    if not isinstance(data, dict) or not data:
+        return {}
+    for metric, datapoints in data.items():
+        data[metric] = [
+            [round_base(x, precision, base), y]
+            for x, y in datapoints
+        ]
+    return data
+
+
+def roundY(data, precision=0, base=1):
+    if not isinstance(data, dict) or not data:
+        return {}
+    for metric, datapoints in data.items():
+        data[metric] = [
+            [x, round_base(y, precision, base)]
+            for x, y in datapoints
+        ]
+    return data
+
+
 def open_db():
     db = fdb.open()
     db.options.set_transaction_retry_limit(3)
@@ -512,12 +538,31 @@ def write_lines(tr, monitoring, available_metrics, lines):
                                     resolutions_options)
 
 
-def generate_metric(tags, metric):
-    tags.pop("machine_id", None)
-    tags.pop("host", None)
-    for tag, value in sorted(tags.items()):
-        metric += (".%s-%s" % (tag, value))
-    return metric.replace('/', '-')
+def generate_metric(tags, measurement):
+    del tags["machine_id"], tags["host"]
+    metric = measurement
+    # First sort the tags in alphanumeric order
+    tags = sorted(tags.items())
+    # Then promote the tags which have the same name as the measurement
+    tags = sorted(tags, key=lambda item: item[0] == measurement, reverse=True)
+    for tag, value in tags:
+        processed_tag = tag.replace(measurement, '')
+        processed_value = value.replace(measurement, '')
+        # Ignore the tag if it is empty
+        if processed_tag:
+            metric += (".%s" % processed_tag)
+        # Ignore the value if it is empty
+        if processed_value and processed_tag:
+            metric += ("-%s" % processed_value)
+        # Accomodate for the possibility
+        # that there is a value with an empty tag
+        elif processed_value:
+            metric += (".%s" % processed_value)
+
+    metric = metric.replace('/', '-')
+    metric = metric.replace('.-', '.')
+    metric = re.sub(r'\.+', ".", metric)
+    return metric
 
 
 def write(data):
