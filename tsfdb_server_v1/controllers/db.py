@@ -2,7 +2,6 @@ import fdb
 import fdb.tuple
 import re
 import logging
-import os
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
@@ -15,19 +14,19 @@ fdb.api_version(620)
 
 log = logging.getLogger(__name__)
 
-aggregate_minute = os.getenv('AGGREGATE_MINUTE', 1)
-aggregate_hour = os.getenv('AGGREGATE_HOUR', 1)
-aggregate_day = os.getenv('AGGREGATE_DAY', 1)
+AGGREGATE_MINUTE = 1
+AGGREGATE_HOUR = 2
+AGGREGATE_DAY = 2
 
-# aggregate_minute = 1
-# aggregate_hour = 2
-# aggregate_day = 2
+TRANSACTION_RETRY_LIMIT = 3
+# timeout in ms
+TRANSACTION_TIMEOUT = 5000
 
 
 def open_db():
     db = fdb.open()
-    db.options.set_transaction_retry_limit(3)
-    db.options.set_transaction_timeout(1000)
+    db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
+    db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
     return db
 
 
@@ -209,8 +208,8 @@ def apply_time_aggregation(tr, monitoring, machine,
 def write_lines(tr, monitoring, available_metrics, lines):
     resolutions = ("minute", "hour", "day")
     resolutions_dirs = {}
-    resolutions_options = {"minute": aggregate_minute,
-                           "hour": aggregate_hour, "day": aggregate_day}
+    resolutions_options = {"minute": AGGREGATE_MINUTE,
+                           "hour": AGGREGATE_HOUR, "day": AGGREGATE_DAY}
     for resolution in resolutions:
         resolutions_dirs[resolution] = monitoring.create_or_open(
             tr, ('metric_per_' + resolution,))
