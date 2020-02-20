@@ -18,9 +18,17 @@ AGGREGATE_MINUTE = 1
 AGGREGATE_HOUR = 2
 AGGREGATE_DAY = 2
 
+DO_NOT_CACHE_FDB_DIRS = False
+
 TRANSACTION_RETRY_LIMIT = 3
 # timeout in ms
 TRANSACTION_TIMEOUT = 5000
+
+fdb_dirs = {}
+resolutions = ("minute", "hour", "day")
+resolutions_dirs = {}
+resolutions_options = {"minute": AGGREGATE_MINUTE,
+                       "hour": AGGREGATE_HOUR, "day": AGGREGATE_DAY}
 
 
 def open_db():
@@ -43,14 +51,16 @@ def find_metrics_from_db(tr, available_metrics, resource):
 def find_metrics(resource):
     try:
         db = open_db()
-        if fdb.directory.exists(db, ('monitoring', 'available_metrics')):
-            available_metrics = fdb.directory.open(
-                db, ('monitoring', 'available_metrics'))
-        else:
-            error_msg = "Monitoring directory doesn't exist."
-            return error(503, error_msg, log)
+        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('available_metrics'):
+            if fdb.directory.exists(db, ('monitoring', 'available_metrics')):
+                fdb_dirs['available_metrics'] = fdb.directory.open(
+                    db, ('monitoring', 'available_metrics'))
+            else:
+                error_msg = "Monitoring directory doesn't exist."
+                return error(503, error_msg, log)
 
-        return find_metrics_from_db(db, available_metrics, resource)
+        return find_metrics_from_db(
+            db, fdb_dirs['available_metrics'], resource)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'), log)
 
@@ -69,13 +79,14 @@ def find_resources_from_db(tr, monitoring, regex_resources):
 def find_resources(regex_resources):
     try:
         db = open_db()
-        if fdb.directory.exists(db, "monitoring"):
-            monitoring = fdb.directory.open(db, "monitoring")
-            return find_resources_from_db(db, monitoring, regex_resources)
-
-        else:
-            error_msg = "Monitoring directory doesn't exist."
-            return error(503, error_msg, log)
+        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
+            if fdb.directory.exists(db, "monitoring"):
+                fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
+            else:
+                error_msg = "Monitoring directory doesn't exist."
+                return error(503, error_msg, log)
+        return find_resources_from_db(
+            db, fdb_dirs['monitoring'], regex_resources)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'), log)
 
@@ -101,11 +112,12 @@ def find_datapoints(resource, start, stop, metrics):
         db = open_db()
         data = {}
         # Open the monitoring directory if it exists
-        if fdb.directory.exists(db, "monitoring"):
-            monitoring = fdb.directory.open(db, ("monitoring",))
-        else:
-            error_msg = "Monitoring directory doesn't exist."
-            return error(503, error_msg, log)
+        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
+            if fdb.directory.exists(db, "monitoring"):
+                fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
+            else:
+                error_msg = "Monitoring directory doesn't exist."
+                return error(503, error_msg, log)
 
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
@@ -113,7 +125,7 @@ def find_datapoints(resource, start, stop, metrics):
 
         for metric in metrics:
             tuples = start_stop_key_tuples(
-                db, time_range_in_hours, monitoring,
+                db, time_range_in_hours, fdb_dirs['monitoring'],
                 resource, metric, start, stop
             )
 
@@ -206,13 +218,10 @@ def apply_time_aggregation(tr, monitoring, machine,
 
 @fdb.transactional
 def write_lines(tr, monitoring, available_metrics, lines):
-    resolutions = ("minute", "hour", "day")
-    resolutions_dirs = {}
-    resolutions_options = {"minute": AGGREGATE_MINUTE,
-                           "hour": AGGREGATE_HOUR, "day": AGGREGATE_DAY}
     for resolution in resolutions:
-        resolutions_dirs[resolution] = monitoring.create_or_open(
-            tr, ('metric_per_' + resolution,))
+        if DO_NOT_CACHE_FDB_DIRS or not resolutions_dirs.get(resolution):
+            resolutions_dirs[resolution] = monitoring.create_or_open(
+                tr, ('metric_per_' + resolution,))
     metrics = {}
     for line in lines:
         dict_line = parse_line(line)
@@ -240,13 +249,18 @@ def write_lines(tr, monitoring, available_metrics, lines):
 def write(data):
     try:
         db = open_db()
-        monitoring = fdb.directory.create_or_open(db, ('monitoring',))
-        available_metrics = monitoring.create_or_open(
-            db, ('available_metrics',))
+        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
+            fdb_dirs['monitoring'] = fdb.directory.create_or_open(
+                db, ('monitoring',))
+        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('available_metrics'):
+            fdb_dirs['available_metrics'] = \
+                fdb_dirs['monitoring'].create_or_open(
+                db, ('available_metrics',))
         # Create a list of lines
         data = data.split('\n')
         # Get rid of all empty lines
         data = [line for line in data if line != ""]
-        write_lines(db, monitoring, available_metrics, data)
+        write_lines(db, fdb_dirs['monitoring'],
+                    fdb_dirs['available_metrics'], data)
     except fdb.FDBError as err:
         return error(503, str(err.description, 'utf-8'), log)
