@@ -14,7 +14,6 @@ from tsfdb_server_v1.models.error import Error  # noqa: E501
 fdb.api_version(620)
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
 
 AGGREGATE_MINUTE = 1
 AGGREGATE_HOUR = 2
@@ -59,7 +58,7 @@ def find_metrics(resource):
                     db, ('monitoring', 'available_metrics'))
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg, log)
+                return error(503, error_msg)
 
         return find_metrics_from_db(
             db, fdb_dirs['available_metrics'], resource)
@@ -67,7 +66,7 @@ def find_metrics(resource):
         error_msg = ("%s on find_metrics(resource) with resource_id: %s" % (
             str(err.description, 'utf-8'),
             resource))
-        return error(503, error_msg, log, traceback=traceback.format_exc(),
+        return error(503, error_msg, traceback=traceback.format_exc(),
                      request=resource)
 
 
@@ -90,7 +89,7 @@ def find_resources(regex_resources):
                 fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg, log)
+                return error(503, error_msg)
         return find_resources_from_db(
             db, fdb_dirs['monitoring'], regex_resources)
     except fdb.FDBError as err:
@@ -99,7 +98,7 @@ def find_resources(regex_resources):
             % (
                 str(err.description, 'utf-8'),
                 regex_resources))
-        return error(503, error_msg, log, traceback=traceback.format_exc(),
+        return error(503, error_msg, traceback=traceback.format_exc(),
                      request=regex_resources)
 
 
@@ -129,7 +128,7 @@ def find_datapoints(resource, start, stop, metrics):
                 fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg, log)
+                return error(503, error_msg)
 
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
@@ -158,7 +157,7 @@ def find_datapoints(resource, start, stop, metrics):
             ("% s on find_datapoints(resource, start, stop"
                 + ", metrics) with resource_id: % s") % (
                 str(err.description, 'utf-8'), resource))
-        return error(503, error_msg, log, traceback=traceback.format_exc(),
+        return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str((resource, start, stop, metrics)))
 
 
@@ -283,5 +282,5 @@ def write(data):
         error_msg = ("%s on write(data) with resource_id: %s" % (
             str(err.description, 'utf-8'),
             parse_line(data[0])["tags"]["machine_id"]))
-        return error(503, error_msg, log, traceback=traceback.format_exc(),
+        return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str(data))

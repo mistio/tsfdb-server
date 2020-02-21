@@ -4,12 +4,15 @@ import logging
 from datetime import datetime, timedelta
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
+
 
 def round_base(x, precision, base):
     return round(base * round(float(x)/base), precision)
 
 
-def error(code, error_msg, log, traceback=None, request=None):
+def error(code, error_msg, traceback=None, request=None):
     if traceback and log.getEffectiveLevel() <= logging.INFO:
         error_msg += ("\nTRACEBACK: %s" % traceback)
     if request and log.getEffectiveLevel() <= logging.DEBUG:
