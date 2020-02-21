@@ -2,6 +2,7 @@ import fdb
 import fdb.tuple
 import re
 import logging
+import traceback
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
@@ -13,6 +14,7 @@ from tsfdb_server_v1.models.error import Error  # noqa: E501
 fdb.api_version(620)
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 AGGREGATE_MINUTE = 1
 AGGREGATE_HOUR = 2
@@ -62,7 +64,11 @@ def find_metrics(resource):
         return find_metrics_from_db(
             db, fdb_dirs['available_metrics'], resource)
     except fdb.FDBError as err:
-        return error(503, str(err.description, 'utf-8'), log)
+        error_msg = ("%s on find_metrics(resource) with resource_id: %s" % (
+            str(err.description, 'utf-8'),
+            resource))
+        return error(503, error_msg, log, traceback=traceback.format_exc(),
+                     request=resource)
 
 
 @fdb.transactional
@@ -88,7 +94,13 @@ def find_resources(regex_resources):
         return find_resources_from_db(
             db, fdb_dirs['monitoring'], regex_resources)
     except fdb.FDBError as err:
-        return error(503, str(err.description, 'utf-8'), log)
+        error_msg = (
+            "%s on find_resources(regex_resources) with regex_resources: %s"
+            % (
+                str(err.description, 'utf-8'),
+                regex_resources))
+        return error(503, error_msg, log, traceback=traceback.format_exc(),
+                     request=regex_resources)
 
 
 @fdb.transactional
@@ -142,7 +154,12 @@ def find_datapoints(resource, start, stop, metrics):
 
         return data
     except fdb.FDBError as err:
-        return error(503, str(err.description, 'utf-8'), log)
+        error_msg = (
+            ("% s on find_datapoints(resource, start, stop"
+                + ", metrics) with resource_id: % s") % (
+                str(err.description, 'utf-8'), resource))
+        return error(503, error_msg, log, traceback=traceback.format_exc(),
+                     request=str((resource, start, stop, metrics)))
 
 
 def write_tuple(tr, monitoring, key, value):
@@ -263,4 +280,8 @@ def write(data):
         write_lines(db, fdb_dirs['monitoring'],
                     fdb_dirs['available_metrics'], data)
     except fdb.FDBError as err:
-        return error(503, str(err.description, 'utf-8'), log)
+        error_msg = ("%s on write(data) with resource_id: %s" % (
+            str(err.description, 'utf-8'),
+            parse_line(data[0])["tags"]["machine_id"]))
+        return error(503, error_msg, log, traceback=traceback.format_exc(),
+                     request=str(data))

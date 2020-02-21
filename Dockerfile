@@ -2,9 +2,6 @@ FROM python:3-buster
 
 ARG FDB_CLIENT_DEB=https://www.foundationdb.org/downloads/6.2.11/ubuntu/installers/foundationdb-clients_6.2.11-1_amd64.deb
 ENV FDB_CLIENT_DEB=${FDB_CLIENT_DEB}
-ENV AGGREGATE_MINUTE=1
-ENV AGGREGATE_HOUR=2
-ENV AGGREGATE_DAY=2
 
 RUN apt-get update && \
     apt-get install -y curl procps && \

@@ -1,5 +1,6 @@
 import dateparser
 import re
+import logging
 from datetime import datetime, timedelta
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
@@ -8,8 +9,12 @@ def round_base(x, precision, base):
     return round(base * round(float(x)/base), precision)
 
 
-def error(code, error_msg, log):
-    log.error(error_msg)
+def error(code, error_msg, log, traceback=None, request=None):
+    if traceback and log.getEffectiveLevel() <= logging.INFO:
+        error_msg += ("\nTRACEBACK: %s" % traceback)
+    if request and log.getEffectiveLevel() <= logging.DEBUG:
+        error_msg += ("\nREQUEST: %s" % request)
+    log.error("ERROR: %s" % error_msg)
     return Error(code, error_msg)
 
 
