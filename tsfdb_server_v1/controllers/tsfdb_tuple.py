@@ -1,25 +1,25 @@
 import logging
+import fdb
 from .helpers import error
 from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
 
-def key_tuple_second(dt, machine, metric):
-    return key_tuple_minute(dt, machine, metric) + (dt.second,)
+def key_tuple_second(dt, metric):
+    return key_tuple_minute(dt, metric) + (dt.second,)
 
 
-def key_tuple_minute(dt, machine, metric):
-    return key_tuple_hour(dt, machine, metric) + (dt.minute,)
+def key_tuple_minute(dt, metric):
+    return key_tuple_hour(dt, metric) + (dt.minute,)
 
 
-def key_tuple_hour(dt, machine, metric):
-    return key_tuple_day(dt, machine, metric) + (dt.hour,)
+def key_tuple_hour(dt, metric):
+    return key_tuple_day(dt, metric) + (dt.hour,)
 
 
-def key_tuple_day(dt, machine, metric):
+def key_tuple_day(dt, metric):
     return (
-        machine,
         metric,
         dt.year,
         dt.month,
@@ -27,8 +27,36 @@ def key_tuple_day(dt, machine, metric):
     )
 
 
+def start_stop_key_tuples_per_resolution(db, start, stop, resource, metric,
+                                         resolution, resolutions_dirs, delta):
+    if not (resolutions_dirs.get(resource) and
+            resolutions_dirs[resource].get(resolution)):
+        if not resolutions_dirs.get(resource):
+            resolutions_dirs[resource] = {}
+        if fdb.directory.exists(db, ("monitoring",
+                                     ("metric_per_" + resolution),
+                                     resource)):
+            resolutions_dirs[resource][resolution] = fdb.directory.open(
+                db, ("monitoring", ("metric_per_" + resolution),
+                     resource))
+        else:
+            error_msg = (
+                "Resource directory with resolution: %s doesn't exist."
+                % resolution)
+            return error(503, error_msg)
+    return [
+        resolutions_dirs[resource][resolution].pack(
+            key_tuple_minute(start, metric)
+        ),
+        resolutions_dirs[resource][resolution].pack(
+            key_tuple_minute(stop + delta, metric)
+        ),
+    ]
+
+
 def start_stop_key_tuples(
-    db, time_range_in_hours, monitoring, machine, metric, start, stop
+    db, time_range_in_hours, resource, machine_dirs,
+    resolutions_dirs, metric, start, stop
 ):
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
@@ -37,62 +65,39 @@ def start_stop_key_tuples(
         # for start, stop returns keys in [start, stop). We convert it to
         # the range [start, stop]
         delta = timedelta(seconds=1)
+        # Open the monitoring directory if it exists
+        if not machine_dirs.get(resource):
+            if fdb.directory.exists(db, ("monitoring", resource)):
+                machine_dirs[resource] = fdb.directory.open(
+                    db, ("monitoring", resource))
+            else:
+                error_msg = "Resource directory doesn't exist."
+                return error(503, error_msg)
         return [
-            monitoring.pack(key_tuple_second(start, machine, metric)),
-            monitoring.pack(key_tuple_second(
-                stop + delta, machine, metric)),
+            machine_dirs[resource].pack(key_tuple_second(start, metric)),
+            machine_dirs[resource].pack(key_tuple_second(
+                stop + delta, metric)),
         ]
     # if time range is less than 2 days, we create the keys for getting the
     # summarizeddatapoints per minute
     elif time_range_in_hours <= 48:
         delta = timedelta(minutes=1)
-        if monitoring.exists(db, "metric_per_minute"):
-            monitoring_sum = monitoring.open(db, ("metric_per_minute",))
-        else:
-            error_msg = "metric_per_minute directory doesn't exist."
-            return error(503, error_msg, log)
-        return [
-            monitoring_sum.pack(
-                key_tuple_minute(start, machine, metric)
-            ),
-            monitoring_sum.pack(
-                key_tuple_minute(stop + delta, machine, metric)
-            ),
-        ]
+        return start_stop_key_tuples_per_resolution(db, start, stop, resource,
+                                                    metric, "minute",
+                                                    resolutions_dirs, delta)
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
     elif time_range_in_hours <= 1440:
         delta = timedelta(hours=1)
-        if monitoring.exists(db, "metric_per_hour"):
-            monitoring_sum = monitoring.open(db, ("metric_per_hour",))
-        else:
-            error_msg = "metric_per_hour directory doesn't exist."
-            return error(503, error_msg, log)
-        return [
-            monitoring_sum.pack(
-                key_tuple_hour(start, machine, metric)
-            ),
-            monitoring_sum.pack(
-                key_tuple_hour(stop + delta, machine, metric)
-            ),
-        ]
+        return start_stop_key_tuples_per_resolution(db, start, stop, resource,
+                                                    metric, "hour",
+                                                    resolutions_dirs, delta)
     # if time range is more than 2 months, we create the keys for getting
     # the summarized datapoints per day
-    else:
-        delta = timedelta(hours=24)
-        if monitoring.exists(db, "metric_per_day"):
-            monitoring_sum = monitoring.open(db, ("metric_per_day",))
-        else:
-            error_msg = "metric_per_day directory doesn't exist."
-            return error(503, error_msg, log)
-        return [
-            monitoring_sum.pack(
-                key_tuple_day(start, machine, metric)
-            ),
-            monitoring_sum.pack(
-                key_tuple_day(stop + delta, machine, metric)
-            ),
-        ]
+    delta = timedelta(hours=24)
+    return start_stop_key_tuples_per_resolution(db, start, stop, resource,
+                                                metric, "day",
+                                                resolutions_dirs, delta)
 
 
 def tuple_to_timestamp(time_range_in_hours, tuple_key):
@@ -130,9 +135,9 @@ def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key):
     return [sum_values / count, timestamp]
 
 
-def time_aggregate_tuple(machine, metric, dt, resolution):
+def time_aggregate_tuple(metric, dt, resolution):
     if resolution == "minute":
-        return key_tuple_minute(dt, machine, metric)
+        return key_tuple_minute(dt, metric)
     elif resolution == "hour":
-        return key_tuple_hour(dt, machine, metric)
-    return key_tuple_day(dt, machine, metric)
+        return key_tuple_hour(dt, metric)
+    return key_tuple_day(dt, metric)
