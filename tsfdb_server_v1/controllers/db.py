@@ -3,6 +3,7 @@ import fdb.tuple
 import re
 import logging
 import traceback
+import threading
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
@@ -37,6 +38,7 @@ def open_db():
     db = fdb.open()
     db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
     db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
+    # db.options.set_location_cache_size(2147483647)
     return db
 
 
@@ -229,37 +231,53 @@ def apply_time_aggregation(tr, monitoring, machine,
             = fdb.tuple.pack((sum_value, count, min_value, max_value))
 
 
-@fdb.transactional
-def write_lines(tr, monitoring, available_metrics, lines):
+def write_lines(db, monitoring, available_metrics, lines):
     for resolution in resolutions:
         if DO_NOT_CACHE_FDB_DIRS or not resolutions_dirs.get(resolution):
             resolutions_dirs[resolution] = monitoring.create_or_open(
-                tr, ('metric_per_' + resolution,))
+                db, ('metric_per_' + resolution,))
     metrics = {}
+    real_metrics = []
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
         if not machine_dirs.get(machine):
             machine_dirs[machine] = monitoring.create_or_open(
-                tr, (machine,))
+                db, (machine,))
         if not metrics.get(machine):
             machine_metrics = find_metrics_from_db(
-                tr, available_metrics, machine)
+                db, available_metrics, machine)
             metrics[machine] = {m for m in machine_metrics.keys()}
         metric = generate_metric(
             dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
-        for field, value in dict_line["fields"].items():
-            machine_metric = "%s.%s" % (metric, field)
-            if write_tuple(tr, machine_dirs[machine], key_tuple_second(
-                    dt, machine_metric), value):
-                if not (machine_metric in metrics.get(machine)):
-                    update_metric(tr, available_metrics, (machine, type(
-                        value).__name__, machine_metric))
-                apply_time_aggregation(tr, monitoring, machine,
-                                       machine_metric, dt, value,
-                                       resolutions, resolutions_dirs,
-                                       resolutions_options)
+        real_metrics.append((dict_line, metric, machine, dt))
+    threads = [
+        threading.Thread(target=write_line, args=(db, my_tuple[0], my_tuple[1], machine_dirs, my_tuple[2], my_tuple[3], metrics,
+                                                  available_metrics, resolutions, resolutions_dirs,
+                                                  resolutions_options, monitoring))
+        for my_tuple in real_metrics]
+    for thr in threads:
+        thr.start()
+    for thr in threads:
+        thr.join()
+
+
+@fdb.transactional
+def write_line(tr, dict_line, metric, machine_dirs, machine, dt, metrics,
+               available_metrics, resolutions, resolutions_dirs,
+               resolutions_options, monitoring):
+    for field, value in dict_line["fields"].items():
+        machine_metric = "%s.%s" % (metric, field)
+        if write_tuple(tr, machine_dirs[machine], key_tuple_second(
+                dt, machine_metric), value):
+            if not (machine_metric in metrics.get(machine)):
+                update_metric(tr, available_metrics, (machine, type(
+                    value).__name__, machine_metric))
+            apply_time_aggregation(tr, monitoring, machine,
+                                   machine_metric, dt, value,
+                                   resolutions, resolutions_dirs,
+                                   resolutions_options)
 
 
 def write(data):
