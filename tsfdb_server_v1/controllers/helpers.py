@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.ERROR)
 
 TSFDB_NOTIFICATIONS_WEBHOOK = ""
 
@@ -33,12 +33,13 @@ def log2slack(log_entry):
 
 
 def error(code, error_msg, traceback=None, request=None):
-    if traceback and log.getEffectiveLevel() <= logging.INFO:
-        error_msg += ("\nTRACEBACK: %s" % traceback)
-    if request and log.getEffectiveLevel() <= logging.DEBUG:
-        error_msg += ("\nREQUEST: %s" % request)
-    log.error("ERROR: %s" % error_msg)
-    log2slack(error_msg)
+    if code >= 500:
+        if traceback and log.getEffectiveLevel() <= logging.INFO:
+            error_msg += ("\nTRACEBACK: %s" % traceback)
+        if request and log.getEffectiveLevel() <= logging.DEBUG:
+            error_msg += ("\nREQUEST: %s" % request)
+        log.error("ERROR: %s" % error_msg)
+        log2slack(error_msg)
     return Error(code, error_msg)
 
 
