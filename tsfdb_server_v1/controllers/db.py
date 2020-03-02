@@ -23,7 +23,7 @@ DO_NOT_CACHE_FDB_DIRS = False
 
 TRANSACTION_RETRY_LIMIT = 0
 # timeout in ms
-TRANSACTION_TIMEOUT = 3000
+TRANSACTION_TIMEOUT = 2000
 
 fdb_dirs = {}
 machine_dirs = {}
@@ -59,7 +59,7 @@ def find_metrics(resource):
                     db, ('monitoring', 'available_metrics'))
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg)
+                return error(404, error_msg)
 
         return find_metrics_from_db(
             db, fdb_dirs['available_metrics'], resource)
@@ -90,7 +90,7 @@ def find_resources(regex_resources):
                 fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg)
+                return error(404, error_msg)
         return find_resources_from_db(
             db, fdb_dirs['monitoring'], regex_resources)
     except fdb.FDBError as err:
