@@ -276,6 +276,23 @@ def write(data):
         data = data.split('\n')
         # Get rid of all empty lines
         data = [line for line in data if line != ""]
+
+        metrics = set()
+        total_datapoints = 0
+        machine = ""
+        for line in data:
+            dict_line = parse_line(line)
+            machine = dict_line["tags"]["machine_id"]
+            total_datapoints += len(dict_line["fields"].items())
+            metric = generate_metric(
+                dict_line["tags"], dict_line["measurement"])
+            for field, _ in dict_line["fields"].items():
+                metrics.add(machine + "-" + metric + "-" + field)
+
+        log.warning(("Request for resource: %s, number of metrics: %d," +
+                     " number of datapoints: %d") % (
+            machine, len(metrics), total_datapoints))
+
         write_lines(db, fdb_dirs['monitoring'],
                     fdb_dirs['available_metrics'], data)
     except fdb.FDBError as err:
