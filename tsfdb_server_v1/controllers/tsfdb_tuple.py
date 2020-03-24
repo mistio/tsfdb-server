@@ -41,8 +41,8 @@ def start_stop_key_tuples_per_resolution(db, start, stop, resource, metric,
                      resource))
         else:
             error_msg = (
-                "Resource directory with resolution: %s doesn't exist."
-                % resolution)
+                "Resource directory: %s with resolution: %s doesn't exist."
+                % (resource, resolution))
             return error(503, error_msg)
     return [
         resolutions_dirs[resource][resolution].pack(
@@ -71,7 +71,8 @@ def start_stop_key_tuples(
                 machine_dirs[resource] = fdb.directory.open(
                     db, ("monitoring", resource))
             else:
-                error_msg = "Resource directory doesn't exist."
+                error_msg = (
+                    "Resource directory: %s doesn't exist." % resource)
                 return error(503, error_msg)
         return [
             machine_dirs[resource].pack(key_tuple_second(start, metric)),
