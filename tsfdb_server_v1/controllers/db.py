@@ -7,6 +7,7 @@ from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
     decrement_time, generate_metric
+from .queue import Queue, Subspace
 from line_protocol_parser import parse_line
 from datetime import datetime
 from tsfdb_server_v1.models.error import Error  # noqa: E501
@@ -154,6 +155,17 @@ def find_datapoints(resource, start, stop, metrics):
                      request=str((resource, start, stop, metrics)))
 
 
+def queue_test():
+    db = open_db()
+    queue = Queue(Subspace(('queue',)))
+    print(queue.peek(db))
+    return
+    item = queue.pop(db)
+    while item:
+        print(item)
+        item = queue.pop(db)
+
+
 def write_tuple(tr, machine_dir, key, value):
     if not tr[machine_dir.pack(key)].present():
         tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
@@ -264,7 +276,11 @@ def write_lines(tr, monitoring, available_metrics, lines):
 
 def write(data):
     try:
+        print("total %d bytes" % len(data.encode('utf-8')))
         db = open_db()
+
+        queue = Queue(Subspace(('queue',)))
+
         if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
             fdb_dirs['monitoring'] = fdb.directory.create_or_open(
                 db, ('monitoring',))
@@ -273,6 +289,9 @@ def write(data):
                 fdb_dirs['monitoring'].create_or_open(
                 db, ('available_metrics',))
         # Create a list of lines
+        queue.push(db, data)
+        print("Pushed %d bytes" % len(data.encode('utf-8')))
+        return
         data = data.split('\n')
         # Get rid of all empty lines
         data = [line for line in data if line != ""]
