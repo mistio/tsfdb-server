@@ -1,23 +1,46 @@
 import dateparser
 import re
+import requests
 import logging
+import json
 from datetime import datetime, timedelta
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.ERROR)
+
+TSFDB_NOTIFICATIONS_WEBHOOK = "https://hooks.slack.com/services/T02PGK5RG/" + \
+    "BUJ4BG737/RykxaB84xSz9GHYKfF4hN9fg"
 
 
 def round_base(x, precision, base):
     return round(base * round(float(x)/base), precision)
 
 
+def log2slack(log_entry):
+    if not TSFDB_NOTIFICATIONS_WEBHOOK:
+        return
+
+    response = requests.post(
+        TSFDB_NOTIFICATIONS_WEBHOOK,
+        data=json.dumps({'text': log_entry}),
+        headers={'Content-Type': 'application/json'}
+    )
+    if response.status_code != 200:
+        log.error(
+            'Request to slack returned an error %s, the response is:'
+            '\n%s' % (response.status_code, response.text)
+        )
+
+
 def error(code, error_msg, traceback=None, request=None):
-    if traceback and log.getEffectiveLevel() <= logging.INFO:
-        error_msg += ("\nTRACEBACK: %s" % traceback)
-    if request and log.getEffectiveLevel() <= logging.DEBUG:
-        error_msg += ("\nREQUEST: %s" % request)
-    log.error("ERROR: %s" % error_msg)
+    if code >= 500:
+        if traceback and log.getEffectiveLevel() <= logging.INFO:
+            error_msg += ("\nTRACEBACK: %s" % traceback)
+        if request and log.getEffectiveLevel() <= logging.DEBUG:
+            error_msg += ("\nREQUEST: %s" % request)
+        log.error("ERROR: %s" % error_msg)
+        log2slack(error_msg)
     return Error(code, error_msg)
 
 

@@ -21,11 +21,12 @@ AGGREGATE_DAY = 2
 
 DO_NOT_CACHE_FDB_DIRS = False
 
-TRANSACTION_RETRY_LIMIT = 3
+TRANSACTION_RETRY_LIMIT = 0
 # timeout in ms
-TRANSACTION_TIMEOUT = 5000
+TRANSACTION_TIMEOUT = 2000
 
 fdb_dirs = {}
+machine_dirs = {}
 resolutions = ("minute", "hour", "day")
 resolutions_dirs = {}
 resolutions_options = {"minute": AGGREGATE_MINUTE,
@@ -58,7 +59,7 @@ def find_metrics(resource):
                     db, ('monitoring', 'available_metrics'))
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg)
+                return error(404, error_msg)
 
         return find_metrics_from_db(
             db, fdb_dirs['available_metrics'], resource)
@@ -89,7 +90,7 @@ def find_resources(regex_resources):
                 fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
             else:
                 error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg)
+                return error(404, error_msg)
         return find_resources_from_db(
             db, fdb_dirs['monitoring'], regex_resources)
     except fdb.FDBError as err:
@@ -122,22 +123,14 @@ def find_datapoints(resource, start, stop, metrics):
     try:
         db = open_db()
         data = {}
-        # Open the monitoring directory if it exists
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
-            if fdb.directory.exists(db, "monitoring"):
-                fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
-            else:
-                error_msg = "Monitoring directory doesn't exist."
-                return error(503, error_msg)
-
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
         for metric in metrics:
             tuples = start_stop_key_tuples(
-                db, time_range_in_hours, fdb_dirs['monitoring'],
-                resource, metric, start, stop
+                db, time_range_in_hours,
+                resource, machine_dirs, resolutions_dirs, metric, start, stop
             )
 
             if isinstance(tuples, Error):
@@ -161,11 +154,11 @@ def find_datapoints(resource, start, stop, metrics):
                      request=str((resource, start, stop, metrics)))
 
 
-def write_tuple(tr, monitoring, key, value):
-    if not tr[monitoring.pack(key)].present():
-        tr[monitoring.pack(key)] = fdb.tuple.pack((value,))
+def write_tuple(tr, machine_dir, key, value):
+    if not tr[machine_dir.pack(key)].present():
+        tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
         return True
-    saved_value = fdb.tuple.unpack(tr[monitoring.pack(key)])[0]
+    saved_value = fdb.tuple.unpack(tr[machine_dir.pack(key)])[0]
     if saved_value != value:
         log.error("key: %s already exists with a different value" % str(key))
     else:
@@ -193,10 +186,16 @@ def apply_time_aggregation(tr, monitoring, machine,
             sum_dt = last_dt
         else:
             sum_dt = dt
-        monitoring_time = resolutions_dirs[resolution]
+        if not (resolutions_dirs.get(machine) and
+                resolutions_dirs[machine].get(resolution)):
+            if not resolutions_dirs.get(machine):
+                resolutions_dirs[machine] = {}
+            resolutions_dirs[machine][resolution] = \
+                resolutions_dirs[resolution].create_or_open(
+                tr, (machine,))
+        monitoring_time = resolutions_dirs[machine][resolution]
         sum_tuple = tr[monitoring_time.pack(
-            time_aggregate_tuple(
-                machine, metric, sum_dt, resolution))]
+            time_aggregate_tuple(metric, sum_dt, resolution))]
         if sum_tuple.present():
             sum_tuple = fdb.tuple.unpack(sum_tuple)
             sum_value, count, min_value, max_value = sum_tuple
@@ -223,12 +222,10 @@ def apply_time_aggregation(tr, monitoring, machine,
                 sum_value, count, min_value, max_value = value, 1, value, value
             last_dt = decrement_time(dt, resolution)
             last_tuple = tr[monitoring_time.pack(
-                time_aggregate_tuple(
-                    machine, metric, last_dt, resolution))]
+                time_aggregate_tuple(metric, last_dt, resolution))]
             new_aggregation = last_tuple.present()
         tr[monitoring_time.pack(
-            time_aggregate_tuple(
-                machine, metric, sum_dt, resolution))] \
+            time_aggregate_tuple(metric, sum_dt, resolution))] \
             = fdb.tuple.pack((sum_value, count, min_value, max_value))
 
 
@@ -242,6 +239,9 @@ def write_lines(tr, monitoring, available_metrics, lines):
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
+        if not machine_dirs.get(machine):
+            machine_dirs[machine] = monitoring.create_or_open(
+                tr, (machine,))
         if not metrics.get(machine):
             machine_metrics = find_metrics_from_db(
                 tr, available_metrics, machine)
@@ -251,8 +251,8 @@ def write_lines(tr, monitoring, available_metrics, lines):
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
-            if write_tuple(tr, monitoring, key_tuple_second(
-                    dt, machine, machine_metric), value):
+            if write_tuple(tr, machine_dirs[machine], key_tuple_second(
+                    dt, machine_metric), value):
                 if not (machine_metric in metrics.get(machine)):
                     update_metric(tr, available_metrics, (machine, type(
                         value).__name__, machine_metric))
@@ -276,6 +276,23 @@ def write(data):
         data = data.split('\n')
         # Get rid of all empty lines
         data = [line for line in data if line != ""]
+
+        metrics = set()
+        total_datapoints = 0
+        machine = ""
+        for line in data:
+            dict_line = parse_line(line)
+            machine = dict_line["tags"]["machine_id"]
+            total_datapoints += len(dict_line["fields"].items())
+            metric = generate_metric(
+                dict_line["tags"], dict_line["measurement"])
+            for field, _ in dict_line["fields"].items():
+                metrics.add(machine + "-" + metric + "-" + field)
+
+        log.warning(("Request for resource: %s, number of metrics: %d," +
+                     " number of datapoints: %d") % (
+            machine, len(metrics), total_datapoints))
+
         write_lines(db, fdb_dirs['monitoring'],
                     fdb_dirs['available_metrics'], data)
     except fdb.FDBError as err:
