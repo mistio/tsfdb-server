@@ -274,12 +274,22 @@ def write_lines(tr, monitoring, available_metrics, lines):
                                        resolutions_options)
 
 
-def write(data):
+def write_in_queue(data):
     try:
-        print("total %d bytes" % len(data.encode('utf-8')))
         db = open_db()
-
         queue = Queue(Subspace(('queue',)))
+        queue.push(db, data)
+        print("Pushed %d bytes" % len(data.encode('utf-8')))
+    except fdb.FDBError as err:
+        error_msg = ("%s on write(data) with resource_id: %s" % (
+            str(err.description, 'utf-8')))
+        return error(503, error_msg, traceback=traceback.format_exc(),
+                     request=str(data))
+
+
+def write_in_kv(data):
+    try:
+        db = open_db()
 
         if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
             fdb_dirs['monitoring'] = fdb.directory.create_or_open(
@@ -289,9 +299,6 @@ def write(data):
                 fdb_dirs['monitoring'].create_or_open(
                 db, ('available_metrics',))
         # Create a list of lines
-        queue.push(db, data)
-        print("Pushed %d bytes" % len(data.encode('utf-8')))
-        return
         data = data.split('\n')
         # Get rid of all empty lines
         data = [line for line in data if line != ""]
