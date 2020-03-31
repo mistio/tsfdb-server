@@ -8,6 +8,7 @@ from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
     decrement_time, generate_metric
 from .queue import Queue, Subspace
+from .tsfdb_dirs import create_or_open_fdb_dir, create_or_open_metric_dir
 from line_protocol_parser import parse_line
 from datetime import datetime
 from tsfdb_server_v1.models.error import Error  # noqa: E501
@@ -28,6 +29,7 @@ TRANSACTION_TIMEOUT = 2000
 
 fdb_dirs = {}
 machine_dirs = {}
+cached_dirs = {}
 resolutions = ("minute", "hour", "day")
 resolutions_dirs = {}
 resolutions_options = {"minute": AGGREGATE_MINUTE,
@@ -42,7 +44,10 @@ def open_db():
 
 
 @fdb.transactional
-def find_metrics_from_db(tr, available_metrics, resource):
+def find_metrics_from_db(tr, resource):
+    # need an open only
+    available_metrics = create_or_open_fdb_dir(
+        tr, ('monitoring', 'available_metrics',), cached_dirs)
     metrics = {}
     for k, v in tr[available_metrics[resource].range()]:
         data_tuple = available_metrics[resource].unpack(k)
@@ -166,7 +171,10 @@ def queue_test():
         item = queue.pop(db)
 
 
-def write_tuple(tr, machine_dir, key, value):
+def write_tuple(tr, machine, key, value):
+    machine_dir = create_or_open_fdb_dir(
+        tr, ('monitoring', 'metric_per_second', machine,),
+        cached_dirs)
     if not tr[machine_dir.pack(key)].present():
         tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
         return True
@@ -178,13 +186,15 @@ def write_tuple(tr, machine_dir, key, value):
     return False
 
 
-def update_metric(tr, available_metrics, metric):
+def update_metric(tr, metric):
+    available_metrics = create_or_open_fdb_dir(
+        tr, ('monitoring', 'available_metrics',), cached_dirs)
     if not tr[available_metrics.pack(metric)].present():
         tr[available_metrics.pack(metric)] = fdb.tuple.pack(("",))
 
 
-def apply_time_aggregation(tr, monitoring, machine,
-                           metric, dt, value, resolutions, resolutions_dirs,
+def apply_time_aggregation(tr, machine,
+                           metric, dt, value, resolutions,
                            resolutions_options):
     new_aggregation = False
     last_tuple = None
@@ -198,14 +208,9 @@ def apply_time_aggregation(tr, monitoring, machine,
             sum_dt = last_dt
         else:
             sum_dt = dt
-        if not (resolutions_dirs.get(machine) and
-                resolutions_dirs[machine].get(resolution)):
-            if not resolutions_dirs.get(machine):
-                resolutions_dirs[machine] = {}
-            resolutions_dirs[machine][resolution] = \
-                resolutions_dirs[resolution].create_or_open(
-                tr, (machine,))
-        monitoring_time = resolutions_dirs[machine][resolution]
+        monitoring_time = create_or_open_fdb_dir(
+            tr, ('monitoring', 'metric_per_' + resolution, machine,),
+            cached_dirs)
         sum_tuple = tr[monitoring_time.pack(
             time_aggregate_tuple(metric, sum_dt, resolution))]
         if sum_tuple.present():
@@ -242,35 +247,28 @@ def apply_time_aggregation(tr, monitoring, machine,
 
 
 @fdb.transactional
-def write_lines(tr, monitoring, available_metrics, lines):
-    for resolution in resolutions:
-        if DO_NOT_CACHE_FDB_DIRS or not resolutions_dirs.get(resolution):
-            resolutions_dirs[resolution] = monitoring.create_or_open(
-                tr, ('metric_per_' + resolution,))
+def write_lines(tr, lines):
     metrics = {}
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
-        if not machine_dirs.get(machine):
-            machine_dirs[machine] = monitoring.create_or_open(
-                tr, (machine,))
         if not metrics.get(machine):
             machine_metrics = find_metrics_from_db(
-                tr, available_metrics, machine)
+                tr, machine)
             metrics[machine] = {m for m in machine_metrics.keys()}
         metric = generate_metric(
             dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
-            if write_tuple(tr, machine_dirs[machine], key_tuple_second(
+            if write_tuple(tr, machine, key_tuple_second(
                     dt, machine_metric), value):
                 if not (machine_metric in metrics.get(machine)):
-                    update_metric(tr, available_metrics, (machine, type(
+                    update_metric(tr, (machine, type(
                         value).__name__, machine_metric))
-                apply_time_aggregation(tr, monitoring, machine,
+                apply_time_aggregation(tr, machine,
                                        machine_metric, dt, value,
-                                       resolutions, resolutions_dirs,
+                                       resolutions,
                                        resolutions_options)
 
 
@@ -291,13 +289,6 @@ def write_in_kv(data):
     try:
         db = open_db()
 
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
-            fdb_dirs['monitoring'] = fdb.directory.create_or_open(
-                db, ('monitoring',))
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('available_metrics'):
-            fdb_dirs['available_metrics'] = \
-                fdb_dirs['monitoring'].create_or_open(
-                db, ('available_metrics',))
         # Create a list of lines
         data = data.split('\n')
         # Get rid of all empty lines
@@ -319,8 +310,7 @@ def write_in_kv(data):
                      " number of datapoints: %d") % (
             machine, len(metrics), total_datapoints))
 
-        write_lines(db, fdb_dirs['monitoring'],
-                    fdb_dirs['available_metrics'], data)
+        write_lines(db, data)
     except fdb.FDBError as err:
         error_msg = ("%s on write(data) with resource_id: %s" % (
             str(err.description, 'utf-8'),
