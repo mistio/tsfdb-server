@@ -186,7 +186,7 @@ class Queue:
 
         waitKey = self._conflictedPop.pack((index, self._randID()))
         # read = tr[waitKey]
-        tr[waitKey] = ''
+        tr[waitKey] = b''
         return waitKey
 
     def _getWaitingPops(self, tr, numPops):
