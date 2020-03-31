@@ -81,8 +81,8 @@ def parse_start_stop_params(start, stop):
         stop = dateparser.parse(stop)
 
     #  round down start and stop time
-    start = start.replace(second=0, microsecond=0)
-    stop = stop.replace(second=0, microsecond=0)
+    start = start.replace(microsecond=0)
+    stop = stop.replace(microsecond=0)
 
     return start, stop
 
