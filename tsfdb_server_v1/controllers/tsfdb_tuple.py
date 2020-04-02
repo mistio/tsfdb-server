@@ -6,8 +6,6 @@ from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
-struct_types = {'int': '<q', 'float': '<q'}
-
 
 def key_tuple_second(dt, metric, stat=None):
     return key_tuple_minute(dt, metric, stat) + (dt.second,)
@@ -146,7 +144,7 @@ def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key,
         return [tuple_value[0], timestamp]
     # else we need to use the summarized values [sum, count, min, max]
     # and convert them to a datapoint [value, timestamp]
-    value = struct.unpack_from(struct_types[metric_type], tuple_value)[0]
+    value = struct.unpack_from('<q', tuple_value)[0]
     if metric_type == "float" and stat != "count":
         value /= 1000
     return [value, timestamp]
