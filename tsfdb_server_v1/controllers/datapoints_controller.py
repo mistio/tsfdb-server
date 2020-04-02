@@ -8,9 +8,11 @@ from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noq
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
 from .query_funcs import fetch, deriv, roundX, roundY
-from .db import write_in_queue
+from .db import write_in_kv, write_in_queue
 
 log = logging.getLogger(__name__)
+
+WRITE_IN_QUEUE = True
 
 
 def fetch_datapoints(query):  # noqa: E501
@@ -62,4 +64,7 @@ def write_datapoints(body, owner=None):  # noqa: E501
     :rtype: None
     """
     body = str(body, 'utf8')
-    write_in_queue(body)
+    if WRITE_IN_QUEUE:
+        write_in_queue(body)
+    else:
+        write_in_kv(body)

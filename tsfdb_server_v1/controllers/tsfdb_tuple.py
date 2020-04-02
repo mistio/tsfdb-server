@@ -1,24 +1,35 @@
 import logging
 import fdb
+import struct
 from .helpers import error
 from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
-
-def key_tuple_second(dt, metric):
-    return key_tuple_minute(dt, metric) + (dt.second,)
+struct_types = {'int': '<q', 'float': '<q'}
 
 
-def key_tuple_minute(dt, metric):
-    return key_tuple_hour(dt, metric) + (dt.minute,)
+def key_tuple_second(dt, metric, stat=None):
+    return key_tuple_minute(dt, metric, stat) + (dt.second,)
 
 
-def key_tuple_hour(dt, metric):
-    return key_tuple_day(dt, metric) + (dt.hour,)
+def key_tuple_minute(dt, metric, stat=None):
+    return key_tuple_hour(dt, metric, stat) + (dt.minute,)
 
 
-def key_tuple_day(dt, metric):
+def key_tuple_hour(dt, metric, stat=None):
+    return key_tuple_day(dt, metric, stat) + (dt.hour,)
+
+
+def key_tuple_day(dt, metric, stat=None):
+    if stat:
+        return (
+            metric,
+            stat,
+            dt.year,
+            dt.month,
+            dt.day,
+        )
     return (
         metric,
         dt.year,
@@ -28,7 +39,8 @@ def key_tuple_day(dt, metric):
 
 
 def start_stop_key_tuples_per_resolution(db, start, stop, resource, metric,
-                                         resolution, resolutions_dirs, delta):
+                                         resolution, resolutions_dirs, delta,
+                                         stat=None):
     if not (resolutions_dirs.get(resource) and
             resolutions_dirs[resource].get(resolution)):
         if not resolutions_dirs.get(resource):
@@ -46,17 +58,17 @@ def start_stop_key_tuples_per_resolution(db, start, stop, resource, metric,
             return error(503, error_msg)
     return [
         resolutions_dirs[resource][resolution].pack(
-            key_tuple_minute(start, metric)
+            key_tuple_minute(start, metric, stat)
         ),
         resolutions_dirs[resource][resolution].pack(
-            key_tuple_minute(stop + delta, metric)
+            key_tuple_minute(stop + delta, metric, stat)
         ),
     ]
 
 
 def start_stop_key_tuples(
     db, time_range_in_hours, resource, machine_dirs,
-    resolutions_dirs, metric, start, stop
+    resolutions_dirs, metric, start, stop, stat=None
 ):
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
@@ -85,20 +97,22 @@ def start_stop_key_tuples(
         delta = timedelta(minutes=1)
         return start_stop_key_tuples_per_resolution(db, start, stop, resource,
                                                     metric, "minute",
-                                                    resolutions_dirs, delta)
+                                                    resolutions_dirs, delta,
+                                                    stat)
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
     elif time_range_in_hours <= 1440:
         delta = timedelta(hours=1)
         return start_stop_key_tuples_per_resolution(db, start, stop, resource,
                                                     metric, "hour",
-                                                    resolutions_dirs, delta)
+                                                    resolutions_dirs, delta,
+                                                    stat)
     # if time range is more than 2 months, we create the keys for getting
     # the summarized datapoints per day
     delta = timedelta(hours=24)
     return start_stop_key_tuples_per_resolution(db, start, stop, resource,
                                                 metric, "day",
-                                                resolutions_dirs, delta)
+                                                resolutions_dirs, delta, stat)
 
 
 def tuple_to_timestamp(time_range_in_hours, tuple_key):
@@ -123,7 +137,8 @@ def tuple_to_timestamp(time_range_in_hours, tuple_key):
     return int(datetime(*tuple_key[-3:]).timestamp())
 
 
-def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key):
+def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key,
+                       metric_type, stat):
     timestamp = tuple_to_timestamp(time_range_in_hours, tuple_key)
     # if the range is less than an hour, we create the appropriate
     # datapoint [value, timestamp]
@@ -131,14 +146,15 @@ def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key):
         return [tuple_value[0], timestamp]
     # else we need to use the summarized values [sum, count, min, max]
     # and convert them to a datapoint [value, timestamp]
-    sum_values = tuple_value[0]
-    count = tuple_value[1]
-    return [sum_values / count, timestamp]
+    value = struct.unpack_from(struct_types[metric_type], tuple_value)[0]
+    if metric_type == "float" and stat != "count":
+        value /= 1000
+    return [value, timestamp]
 
 
-def time_aggregate_tuple(metric, dt, resolution):
+def time_aggregate_tuple(metric, stat, dt, resolution):
     if resolution == "minute":
-        return key_tuple_minute(dt, metric)
+        return key_tuple_minute(dt, metric, stat)
     elif resolution == "hour":
-        return key_tuple_hour(dt, metric)
-    return key_tuple_day(dt, metric)
+        return key_tuple_hour(dt, metric, stat)
+    return key_tuple_day(dt, metric, stat)

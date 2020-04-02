@@ -44,7 +44,7 @@ def error(code, error_msg, traceback=None, request=None):
     return Error(code, error_msg)
 
 
-def metric_to_dict(metric):
+def metric_to_dict(metric, metric_type):
     return {
         metric: {
             "id": metric,
@@ -55,6 +55,7 @@ def metric_to_dict(metric):
             "min_value": None,
             "priority": 0,
             "unit": "",
+            "type": metric_type
         }
     }
 
@@ -124,3 +125,9 @@ def generate_metric(tags, measurement):
     metric = metric.replace('.-', '.')
     metric = re.sub(r'\.+', ".", metric)
     return metric
+
+
+def div_datapoints(datapoints1, datapoints2):
+    return [[d1/d2, t1]
+            for ((d1, t1), (d2, t2)) in zip(datapoints1, datapoints2)
+            if t1 == t2]
