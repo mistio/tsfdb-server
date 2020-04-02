@@ -34,7 +34,7 @@ resolutions_dirs = {}
 resolutions_options = {"minute": AGGREGATE_MINUTE,
                        "hour": AGGREGATE_HOUR, "day": AGGREGATE_DAY}
 
-struct_types = {int: '<q', float: '<q'}
+struct_types = (int, float)
 
 
 def open_db():
@@ -230,8 +230,7 @@ def update_metric(tr, available_metrics, metric, metric_type):
 def apply_time_aggregation(tr, monitoring, machine,
                            metric, dt, value, resolutions, resolutions_dirs,
                            resolutions_options):
-    struct_type = struct_types.get(type(value))
-    if struct_type is None:
+    if type(value) not in struct_types:
         log.warning("Unsupported aggregation value type: %s" %
                     str(type(value)))
         return
@@ -254,13 +253,13 @@ def apply_time_aggregation(tr, monitoring, machine,
             struct.pack('<q', 1))
         tr.add(monitoring_time.pack(
             time_aggregate_tuple(metric, "sum", dt, resolution)),
-            struct.pack(struct_type, value))
+            struct.pack('<q', value))
         tr.min(monitoring_time.pack(
             time_aggregate_tuple(metric, "min", dt, resolution)),
-            struct.pack(struct_type, value))
+            struct.pack('<q', value))
         tr.max(monitoring_time.pack(
             time_aggregate_tuple(metric, "max", dt, resolution)),
-            struct.pack(struct_type, value))
+            struct.pack('<q', value))
 
 
 @fdb.transactional
