@@ -4,6 +4,11 @@ import re
 import logging
 import traceback
 import struct
+import gevent
+
+from gevent import monkey
+monkey.patch_all(thread=False)
+
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
@@ -38,7 +43,15 @@ struct_types = (int, float)
 
 
 def open_db():
+    return open_db_gevent()
     db = fdb.open()
+    db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
+    db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
+    return db
+
+
+def open_db_gevent():
+    db = fdb.open(event_model="gevent")
     db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
     db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
     return db
@@ -145,49 +158,77 @@ def find_datapoints_from_db(tr, start, stop, time_range_in_hours, resource,
     return datapoints
 
 
+def _find_datapoints_per_metric(db, time_range_in_hours, resource,
+                                machine_dirs, resolutions_dirs, metric,
+                                start, stop):
+    stats = (None,)
+    datapoints_per_stat = {}
+    if time_range_in_hours > 1:
+        stats = ("count", "sum")
+
+    for stat in stats:
+        tuples = start_stop_key_tuples(
+            db, time_range_in_hours,
+            resource, machine_dirs, resolutions_dirs, metric, start,
+            stop, stat
+        )
+
+        if isinstance(tuples, Error):
+            return tuples
+
+        key_timestamp_start, key_timestamp_stop = tuples
+
+        datapoints_per_stat[stat] = find_datapoints_from_db(
+            db, key_timestamp_start, key_timestamp_stop,
+            time_range_in_hours, resource, metric, stat)
+
+        if isinstance(datapoints_per_stat[stat], Error):
+            return datapoints_per_stat[stat]
+
+    if time_range_in_hours > 1:
+        datapoints = div_datapoints(list(
+            datapoints_per_stat["sum"]),
+            list(datapoints_per_stat["count"]))
+    else:
+        datapoints = list(datapoints_per_stat[None])
+
+    return {("%s.%s" % (resource, metric)): datapoints}
+
+
 def find_datapoints(resource, start, stop, metrics):
     try:
-        db = open_db()
+        #db = open_db()
+        db = open_db_gevent()
+        log.error("FUCK")
         data = {}
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
-        datapoints_per_stat = {}
+        threads = []
+
+        """for metric in metrics:
+            # Start the load operations and mark each future with its URL
+            data.update(_find_datapoints_per_metric(db,
+                                                    time_range_in_hours, resource,
+                                                    machine_dirs, resolutions_dirs,
+                                                    metric, start, stop))
+        return data"""
+
         for metric in metrics:
-            stats = (None,)
-            if time_range_in_hours > 1:
-                stats = ("count", "sum")
-
-            for stat in stats:
-                tuples = start_stop_key_tuples(
-                    db, time_range_in_hours,
-                    resource, machine_dirs, resolutions_dirs, metric, start,
-                    stop, stat
-                )
-
-                if isinstance(tuples, Error):
-                    return tuples
-
-                key_timestamp_start, key_timestamp_stop = tuples
-
-                datapoints_per_stat[stat] = find_datapoints_from_db(
-                    db, key_timestamp_start, key_timestamp_stop,
-                    time_range_in_hours, resource, metric, stat)
-
-                if isinstance(datapoints_per_stat[stat], Error):
-                    return datapoints_per_stat[stat]
-
-            if time_range_in_hours > 1:
-                datapoints = div_datapoints(list(
-                    datapoints_per_stat["sum"]),
-                    list(datapoints_per_stat["count"]))
-            else:
-                datapoints = list(datapoints_per_stat[None])
-
-            data.update({("%s.%s" % (resource, metric)): datapoints})
+            # Start the load operations and mark each future with its URL
+            threads.append(gevent.spawn(_find_datapoints_per_metric, db,
+                                        time_range_in_hours, resource,
+                                        machine_dirs, resolutions_dirs,
+                                        metric, start, stop))
+        metrics_data = gevent.joinall(threads)
+        for metric_data in metrics_data:
+            if isinstance(metric_data.value, Error):
+                return metric_data.value
+            data.update(metric_data.value)
 
         return data
+
     except fdb.FDBError as err:
         error_msg = (
             ("% s on find_datapoints(resource, start, stop"
