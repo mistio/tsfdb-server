@@ -199,7 +199,6 @@ def find_datapoints(resource, start, stop, metrics):
     try:
         #db = open_db()
         db = open_db_gevent()
-        log.error("FUCK")
         data = {}
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
@@ -225,7 +224,8 @@ def find_datapoints(resource, start, stop, metrics):
         for metric_data in metrics_data:
             if isinstance(metric_data.value, Error):
                 return metric_data.value
-            data.update(metric_data.value)
+            if metric_data.value:
+                data.update(metric_data.value)
 
         return data
 
