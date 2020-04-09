@@ -3,6 +3,7 @@ import re
 import requests
 import logging
 import json
+import time
 from datetime import datetime, timedelta
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
@@ -131,3 +132,14 @@ def div_datapoints(datapoints1, datapoints2):
     return [[d1/d2, t1]
             for ((d1, t1), (d2, t2)) in zip(datapoints1, datapoints2)
             if t1 == t2]
+
+
+def profile(func):
+    def wrap(*args, **kwargs):
+        begin = time.time()
+        func(*args, **kwargs)
+        end = time.time()
+        print(("Function %s took %d msecs") %
+              (func.__name__, int((end - begin)*1000)))
+
+    return wrap

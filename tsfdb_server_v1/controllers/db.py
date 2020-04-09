@@ -7,7 +7,7 @@ import struct
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
-    generate_metric, div_datapoints
+    generate_metric, div_datapoints, profile
 from .queue import Queue, Subspace
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -309,6 +309,7 @@ def write_in_queue(data):
                      request=str(data))
 
 
+@profile
 def write_in_kv(data):
     try:
         db = open_db()
