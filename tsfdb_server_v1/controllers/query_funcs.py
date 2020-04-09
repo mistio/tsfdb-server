@@ -1,3 +1,4 @@
+import asyncio
 import re
 import numpy as np
 import logging
@@ -62,7 +63,9 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
                 return error(400, error_msg, log)
         else:
             metrics = [metrics]
-        current_data = find_datapoints(resource, start, stop, metrics)
+        loop = asyncio.get_event_loop()
+        current_data = loop.run_until_complete(
+            find_datapoints(resource, start, stop, metrics))
         if isinstance(current_data, Error):
             return current_data
         data.update(current_data)
