@@ -1,3 +1,4 @@
+import asyncio
 import fdb
 import fdb.tuple
 import re
@@ -39,6 +40,13 @@ struct_types = (int, float)
 
 def open_db():
     db = fdb.open()
+    db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
+    db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
+    return db
+
+
+def open_db_async():
+    db = fdb.open(event_model="asyncio")
     db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
     db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
     return db
@@ -145,47 +153,68 @@ def find_datapoints_from_db(tr, start, stop, time_range_in_hours, resource,
     return datapoints
 
 
-def find_datapoints(resource, start, stop, metrics):
+def _find_datapoints_per_metric(db, time_range_in_hours, resource,
+                                machine_dirs, resolutions_dirs, metric,
+                                start, stop):
+    stats = (None,)
+    datapoints_per_stat = {}
+    if time_range_in_hours > 1:
+        stats = ("count", "sum")
+
+    for stat in stats:
+        tuples = start_stop_key_tuples(
+            db, time_range_in_hours,
+            resource, machine_dirs, resolutions_dirs, metric, start,
+            stop, stat
+        )
+
+        if isinstance(tuples, Error):
+            return tuples
+
+        key_timestamp_start, key_timestamp_stop = tuples
+
+        datapoints_per_stat[stat] = find_datapoints_from_db(
+            db, key_timestamp_start, key_timestamp_stop,
+            time_range_in_hours, resource, metric, stat)
+
+        if isinstance(datapoints_per_stat[stat], Error):
+            return datapoints_per_stat[stat]
+
+    if time_range_in_hours > 1:
+        datapoints = div_datapoints(list(
+            datapoints_per_stat["sum"]),
+            list(datapoints_per_stat["count"]))
+    else:
+        datapoints = list(datapoints_per_stat[None])
+
+    return {("%s.%s" % (resource, metric)): datapoints}
+
+
+async def find_datapoints(resource, start, stop, metrics):
     try:
-        db = open_db()
+        loop = asyncio.get_event_loop()
+        db = open_db_async()
         data = {}
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
-        datapoints_per_stat = {}
-        for metric in metrics:
-            stats = (None,)
-            if time_range_in_hours > 1:
-                stats = ("count", "sum")
+        metrics_data = [
+            loop.run_in_executor(None, _find_datapoints_per_metric, *
+                                 (db,
+                                  time_range_in_hours, resource,
+                                  machine_dirs, resolutions_dirs,
+                                  metric, start, stop))
+            for metric in metrics
+        ]
 
-            for stat in stats:
-                tuples = start_stop_key_tuples(
-                    db, time_range_in_hours,
-                    resource, machine_dirs, resolutions_dirs, metric, start,
-                    stop, stat
-                )
+        metrics_data = await asyncio.gather(*metrics_data)
 
-                if isinstance(tuples, Error):
-                    return tuples
-
-                key_timestamp_start, key_timestamp_stop = tuples
-
-                datapoints_per_stat[stat] = find_datapoints_from_db(
-                    db, key_timestamp_start, key_timestamp_stop,
-                    time_range_in_hours, resource, metric, stat)
-
-                if isinstance(datapoints_per_stat[stat], Error):
-                    return datapoints_per_stat[stat]
-
-            if time_range_in_hours > 1:
-                datapoints = div_datapoints(list(
-                    datapoints_per_stat["sum"]),
-                    list(datapoints_per_stat["count"]))
-            else:
-                datapoints = list(datapoints_per_stat[None])
-
-            data.update({("%s.%s" % (resource, metric)): datapoints})
+        for metric_data in metrics_data:
+            if isinstance(metric_data, Error):
+                return metric_data
+            if metric_data:
+                data.update(metric_data)
 
         return data
     except fdb.FDBError as err:
