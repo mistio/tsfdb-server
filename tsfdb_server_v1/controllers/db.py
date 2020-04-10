@@ -237,18 +237,12 @@ def queue_test():
         item = queue.pop(db)
 
 
-def write_tuple(tr, machine_dir, key, value):
-    tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
-    return True
-    """if not tr[machine_dir.pack(key)].present():
+def write_tuple_full_resolution(tr, machine_dir, key, value):
+    if not tr[machine_dir.pack(key)].present():
         tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
         return True
-    saved_value = fdb.tuple.unpack(tr[machine_dir.pack(key)])[0]
-    if saved_value != value:
-        log.error("key: %s already exists with a different value" % str(key))
-    else:
-        log.warning("key: %s already exists with the same value" % str(key))
-    return False"""
+    log.warning("key: %s already exists" % str(key))
+    return False
 
 
 def update_metric(tr, available_metrics, metric, metric_type):
@@ -291,13 +285,59 @@ def apply_time_aggregation(tr, monitoring, machine,
             struct.pack('<q', value))
 
 
-@fdb.transactional
-def write_lines(tr, monitoring, available_metrics, lines):
+def write_line(tr, monitoring, available_metrics, line, metrics,
+               machine_dirs, resolutions, resolutions_dirs,
+               resolutions_options):
+    dict_line = parse_line(line)
+    machine = dict_line["tags"]["machine_id"]
+    if not machine_dirs.get(machine):
+        machine_dirs[machine] = monitoring.create_or_open(
+            tr, (machine,))
+    if not metrics.get(machine):
+        machine_metrics = find_metrics_from_db(
+            tr, available_metrics, machine)
+        metrics[machine] = {m for m in machine_metrics.keys()}
+    metric = generate_metric(
+        dict_line["tags"], dict_line["measurement"])
+    dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
+    for field, value in dict_line["fields"].items():
+        machine_metric = "%s.%s" % (metric, field)
+        if write_tuple(tr, machine_dirs[machine], key_tuple_second(
+                dt, machine_metric), value):
+            if not (machine_metric in metrics.get(machine)):
+                update_metric(tr, available_metrics,
+                              (machine, machine_metric),
+                              type(value).__name__)
+            apply_time_aggregation(tr, monitoring, machine,
+                                   machine_metric, dt, value,
+                                   resolutions, resolutions_dirs,
+                                   resolutions_options)
+
+
+def write_tuple(tr, machine_dirs, dt, machine_metric, value, metrics,
+                available_metrics, machine, monitoring, resolutions,
+                resolutions_dirs, resolutions_options):
+    if write_tuple_full_resolution(tr, machine_dirs[machine], key_tuple_second(
+            dt, machine_metric), value):
+        if not (machine_metric in metrics.get(machine)):
+            update_metric(tr, available_metrics,
+                          (machine, machine_metric),
+                          type(value).__name__)
+        apply_time_aggregation(tr, monitoring, machine,
+                               machine_metric, dt, value,
+                               resolutions, resolutions_dirs,
+                               resolutions_options)
+
+
+async def write_lines(tr, monitoring, available_metrics, lines):
+    metrics = {}
+    loop = asyncio.get_event_loop()
     for resolution in resolutions:
         if DO_NOT_CACHE_FDB_DIRS or not resolutions_dirs.get(resolution):
             resolutions_dirs[resolution] = monitoring.create_or_open(
                 tr, ('metric_per_' + resolution,))
-    metrics = {}
+    writers = []
+
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
@@ -313,16 +353,16 @@ def write_lines(tr, monitoring, available_metrics, lines):
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
-            if write_tuple(tr, machine_dirs[machine], key_tuple_second(
-                    dt, machine_metric), value):
-                if not (machine_metric in metrics.get(machine)):
-                    update_metric(tr, available_metrics,
-                                  (machine, machine_metric),
-                                  type(value).__name__)
-                apply_time_aggregation(tr, monitoring, machine,
-                                       machine_metric, dt, value,
-                                       resolutions, resolutions_dirs,
-                                       resolutions_options)
+            writers.append(loop.run_in_executor(None, write_tuple, *
+                                                (tr, machine_dirs, dt,
+                                                 machine_metric, value,
+                                                 metrics,
+                                                 available_metrics, machine,
+                                                 monitoring, resolutions,
+                                                 resolutions_dirs,
+                                                 resolutions_options)))
+
+    await asyncio.gather(*writers, return_exceptions=True)
 
 
 def write_in_queue(data):
@@ -338,10 +378,18 @@ def write_in_queue(data):
                      request=str(data))
 
 
+@fdb.transactional
+def _write_in_kv(tr, fdb_dirs, data):
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(
+        write_lines(tr, fdb_dirs['monitoring'],
+                    fdb_dirs['available_metrics'], data))
+
+
 @profile
 def write_in_kv(data):
     try:
-        db = open_db()
+        db = open_db_async()
 
         if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
             fdb_dirs['monitoring'] = fdb.directory.create_or_open(
@@ -371,8 +419,8 @@ def write_in_kv(data):
                      " number of datapoints: %d") % (
             machine, len(metrics), total_datapoints))
 
-        write_lines(db, fdb_dirs['monitoring'],
-                    fdb_dirs['available_metrics'], data)
+        _write_in_kv(db, fdb_dirs, data)
+
     except fdb.FDBError as err:
         error_msg = ("%s on write_in_kv(data) with resource_id: %s" % (
             str(err.description, 'utf-8'),
