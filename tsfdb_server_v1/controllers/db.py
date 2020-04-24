@@ -2,13 +2,15 @@ import asyncio
 import fdb
 import fdb.tuple
 import re
+import requests
 import logging
 import traceback
+import urllib.parse
 import struct
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
-    generate_metric, div_datapoints, profile
+    generate_metric, div_datapoints, profile, is_regex
 from .queue import Queue, Subspace
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -28,6 +30,12 @@ TRANSACTION_RETRY_LIMIT = 0
 # timeout in ms
 TRANSACTION_TIMEOUT = 2000
 
+########################
+METRICS_PER_REQUEST = 1
+SPLIT_REQUESTS = True
+########################
+TSFDB_URI = "http://localhost:8080"
+
 fdb_dirs = {}
 machine_dirs = {}
 resolutions = ("minute", "hour", "day")
@@ -40,13 +48,6 @@ struct_types = (int, float)
 
 def open_db():
     db = fdb.open()
-    db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
-    db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
-    return db
-
-
-def open_db_async():
-    db = fdb.open(event_model="asyncio")
     db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
     db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
     return db
@@ -193,7 +194,7 @@ def _find_datapoints_per_metric(db, time_range_in_hours, resource,
 async def find_datapoints(resource, start, stop, metrics):
     try:
         loop = asyncio.get_event_loop()
-        db = open_db_async()
+        db = open_db()
         data = {}
         start, stop = parse_start_stop_params(start, stop)
         time_range = stop - start
@@ -379,3 +380,130 @@ def write_in_kv(data):
             parse_line(data[0])["tags"]["machine_id"]))
         return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str(data))
+
+
+def _read_single_proc(resource, metrics, start, stop, step):
+    error_msg = ""
+    resources_and_metrics = ['{resource}.{metric}'.format(
+        resource=resource, metric=metric) for metric in metrics]
+    query = ('fetch({resources_and_metrics}' +
+             ', start=\"{start}\", stop=\"{stop}\"' +
+             ', step=\"{step}\")').format(
+        resources_and_metrics=resources_and_metrics,
+        start=start, stop=stop, step=step)
+    try:
+        raw_machine_data = requests.get(
+            "%s/v1/datapoints?query=%s"
+            % (TSFDB_URI, urllib.parse.quote(str(query))),
+            timeout=5
+        )
+        if not raw_machine_data.ok:
+            error_msg = (('Got %d on get_stats: %s') %
+                         raw_machine_data.status_code, raw_machine_data.content)
+            raise
+        return raw_machine_data
+    except Exception as err:
+        error_msg += (
+            "%r on _read_single_proc with resource_id: %s" % (
+                err, resource))
+        return error(503, error_msg, traceback=traceback.format_exc(),
+                     request=query)
+
+
+async def read_multiple_proc(resource, metrics, start, stop, step):
+    raw_metrics_data = ""
+    try:
+        n = METRICS_PER_REQUEST
+        loop = asyncio.get_event_loop()
+        data_to_return = {}
+
+        batch_metrics_data = [
+            loop.run_in_executor(None, _read_single_proc, *
+                                 (resource, metrics[l:l+n], start, stop, step))
+            for l in range(0, len(metrics), n)
+        ]
+
+        batch_metrics_data = await asyncio.gather(*batch_metrics_data)
+
+        for raw_metrics_data in batch_metrics_data:
+            metrics_data = raw_metrics_data.json()
+            if isinstance(metrics_data, Error):
+                return metrics_data
+            metrics_data = metrics_data['series']
+            data_to_return.update(metrics_data)
+
+        return data_to_return
+
+    except Exception as err:
+        error_msg = (
+            "%r on read_multiple_proc with resource_id: %s" % (
+                err, resource))
+        return error(503, error_msg, traceback=traceback.format_exc(),
+                     request=raw_metrics_data.json()['query'])
+
+
+async def _fetch_list(multiple_resources_and_metrics, start="", stop="", step=""):
+    data = {}
+    loop = asyncio.get_event_loop()
+    data_list = [
+        loop.run_in_executor(None, _fetch, *
+                             (resources_and_metrics, start, stop, step))
+        for resources_and_metrics in multiple_resources_and_metrics
+    ]
+
+    data_list = await asyncio.gather(*data_list)
+
+    for data_item in data_list:
+        if isinstance(data_item, Error):
+            return data_item
+        data.update(data_item)
+
+    return data
+
+
+def _fetch(resources_and_metrics, start="", stop="", step=""):
+    data = {}
+    resources, metrics = resources_and_metrics.split(".", 1)
+    if is_regex(resources):
+        # At the moment we ignore the cases where the resource is a regex
+        # resources = find_resources(resources)
+        return {}
+    else:
+        resources = [resources]
+
+    for resource in resources:
+        if is_regex(metrics):
+            regex_metric = metrics
+            metrics = []
+            all_metrics = find_metrics(resource)
+            if isinstance(all_metrics, Error):
+                return all_metrics
+            if regex_metric == "*":
+                #metrics = [candidate for candidate in all_metrics]
+                if SPLIT_REQUESTS:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    current_data = loop.run_until_complete(
+                        read_multiple_proc(resource, list(all_metrics.keys()), start, stop, step))
+                    return current_data
+                metrics = [candidate for candidate in all_metrics]
+            else:
+                for candidate in all_metrics:
+                    if re.match("^%s$" % regex_metric, candidate):
+                        metrics.append(candidate)
+            if len(metrics) == 0:
+                error_msg = (
+                    "No metrics for regex: \"%s\" where found" % regex_metric
+                )
+                return error(400, error_msg, log)
+        else:
+            metrics = [metrics]
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        current_data = loop.run_until_complete(
+            find_datapoints(resource, start, stop, metrics))
+        if isinstance(current_data, Error):
+            return current_data
+        data.update(current_data)
+
+    return data
