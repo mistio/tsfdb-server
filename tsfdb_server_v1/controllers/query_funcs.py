@@ -66,3 +66,17 @@ def deriv(data):
             )
         ]
     return data
+
+
+def topk(data, k=20):
+    if not isinstance(data, dict) or not data:
+        return {}
+    sum_data = {}
+    top_data = {}
+    for metric, datapoints in data.items():
+        sum_data[metric] = sum(x for x, y in datapoints)/len(datapoints)
+    for metric, datapoints in sorted(sum_data.items(),
+                                     key=lambda item: item[1],
+                                     reverse=True)[0:k]:
+        top_data[metric] = data[metric]
+    return top_data
