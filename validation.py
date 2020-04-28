@@ -34,33 +34,40 @@ class TsfdbClient(object):
         self.url = url
 
     def get_datapoints_from_resources(self, resources):
+        time_per_request = {}
         print("Getting datapoints from %d resources" % len(resources))
         loop = asyncio.get_event_loop()
-        data = loop.run_until_complete(self._get_datapoints(resources))
+        data = loop.run_until_complete(
+            self._get_datapoints(resources, time_per_request))
         if None in data:
             print("Failed to get datapoints from %d resources" %
                   len([True for d in data if not d]))
+        print("Slowest response took: %d ms" %
+              int(min(time_per_request.values()).microseconds * 0.001))
         data_dict = {}
         for d in data:
             data_dict.update(d)
         return data_dict
 
-    async def _get_datapoints(self, resources):
+    async def _get_datapoints(self, resources, time_per_request):
         loop = asyncio.get_event_loop()
         data = [
             loop.run_in_executor(None, self.get_datapoints_from_resource, *
-                                 (resource,))
+                                 (resource, time_per_request))
             for resource in resources
         ]
 
         return await asyncio.gather(*data)
 
-    def get_datapoints_from_resource(self, resource):
+    def get_datapoints_from_resource(self, resource, time_per_request):
         metric = "system.load1"
         query = 'fetch("%s.%s", start="", stop="", step="")' % (
             resource, metric)
+        dt_before = datetime.now()
         data = requests.get(
             "%s/v1/datapoints?query=%s" % (self.url, query))
+        dt_after = datetime.now()
+        time_per_request[resource] = dt_after - dt_before
         if data.ok:
             data = data.json()
             return data["series"]
@@ -105,7 +112,7 @@ def check_late_datapoints(data, timestamp, max_acceptable_delay=30):
                     > max_acceptable_delay:
                 print("Over %ds delay in datapoints for resource with id: %d"
                       % max_acceptable_delay, resource)
-    print("Max delay was %.3f s" % max_delay)
+    print("Max datapoints delay was %.3f s" % max_delay)
 
 
 def main():
@@ -115,14 +122,11 @@ def main():
     print("Number of monitored resources: %s" %
           len(monitored_resources))
     tsfdb = TsfdbClient(tsfdb_url)
-    dt_before = datetime.now()
+    dt = datetime.now()
     data = tsfdb.get_datapoints_from_resources(monitored_resources)
-    dt_after = datetime.now()
-    print("Getting datapoints took: %d ms" %
-          int((dt_after - dt_before).microseconds * 0.001))
     check_missing_datapoints(data)
     check_inorder_datapoints(data)
-    check_late_datapoints(data, datetime.timestamp(dt_before))
+    check_late_datapoints(data, datetime.timestamp(dt))
 
 
 if __name__ == "__main__":
