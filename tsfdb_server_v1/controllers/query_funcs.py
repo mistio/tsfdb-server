@@ -44,7 +44,7 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
     loop = asyncio.get_event_loop()
     data = loop.run_until_complete(
         _fetch_list(
-            multiple_resources_and_metrics, start="", stop="", step=""))
+            multiple_resources_and_metrics, start, stop, step))
 
     return data
 
