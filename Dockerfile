@@ -1,6 +1,6 @@
 FROM python:3-buster
 
-ARG FDB_CLIENT_DEB=https://www.foundationdb.org/downloads/6.2.11/ubuntu/installers/foundationdb-clients_6.2.11-1_amd64.deb
+ARG FDB_CLIENT_DEB=https://www.foundationdb.org/downloads/6.2.19/ubuntu/installers/foundationdb-clients_6.2.19-1_amd64.deb
 ENV FDB_CLIENT_DEB=${FDB_CLIENT_DEB}
 
 RUN apt-get update && \
