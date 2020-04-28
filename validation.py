@@ -1,5 +1,6 @@
 import requests
 import asyncio
+from datetime import datetime
 
 mist_url = "http://192.168.1.8"
 tsfdb_url = "http://tsfdb:8080"
@@ -66,6 +67,47 @@ class TsfdbClient(object):
         return None
 
 
+def calculate_time_intervals(datapoints):
+    intervals = []
+    prev_timestamp = 0
+    for value, timestamp in datapoints:
+        if prev_timestamp:
+            intervals.append(timestamp - prev_timestamp)
+        prev_timestamp = timestamp
+    return intervals
+
+
+def check_missing_datapoints(data):
+    for resource, datapoints in data.items():
+        if len(datapoints) == 0:
+            print("No datapoints for resource with id: %s" % resource)
+        elif len(datapoints) > 1:
+            intervals = calculate_time_intervals(datapoints)
+            if min(intervals) != max(intervals):
+                print("Missing datapoints for resource with id: %s" % resource)
+
+
+def check_inorder_datapoints(data):
+    for resource, datapoints in data.items():
+        if len(datapoints):
+            if datapoints != sorted(datapoints, key=lambda x: x[1]):
+                print("Datapoints are not in order for resource with id: %s"
+                      % resource)
+
+
+def check_late_datapoints(data, timestamp, max_acceptable_delay=30):
+    max_delay = 0
+    for resource, datapoints in data.items():
+        if len(datapoints):
+            max_delay = max(max_delay, timestamp -
+                            datapoints[len(datapoints)-1][1])
+            if (timestamp - datapoints[len(datapoints)-1][1]) \
+                    > max_acceptable_delay:
+                print("Over %ds delay in datapoints for resource with id: %d"
+                      % max_acceptable_delay, resource)
+    print("Max delay was %.3f s" % max_delay)
+
+
 def main():
     mist = MistClient(mist_url, token)
     monitored_resources = list(mist.get_monitored_resources().keys())
@@ -73,7 +115,14 @@ def main():
     print("Number of monitored resources: %s" %
           len(monitored_resources))
     tsfdb = TsfdbClient(tsfdb_url)
-    print(tsfdb.get_datapoints_from_resources(monitored_resources))
+    dt_before = datetime.now()
+    data = tsfdb.get_datapoints_from_resources(monitored_resources)
+    dt_after = datetime.now()
+    print("Getting datapoints took: %d ms" %
+          int((dt_after - dt_before).microseconds * 0.001))
+    check_missing_datapoints(data)
+    check_inorder_datapoints(data)
+    check_late_datapoints(data, datetime.timestamp(dt_before))
 
 
 if __name__ == "__main__":
