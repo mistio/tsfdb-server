@@ -1,10 +1,22 @@
 import requests
 import asyncio
+import sys
+import getopt
 from datetime import datetime
 
-mist_url = "http://192.168.1.8"
-tsfdb_url = "http://tsfdb:8080"
-token = "c6f02d5181a24c6384192e9edbcc8b7fd072f5215ebbf2ddeaafeb14d78c90e7"
+mist_url = "http://dogfood2-mist-api"
+tsfdb_url = "http://localhost:8080"
+token = "token"
+
+machine_data = {
+    "cloud": "359f5325870f4fa4bee7e8de4ef3e4da",
+    "name": "tsfdb_stress_test00",
+    "image": "a9790c9a4d3f4e5ea17fa6415f394c87",
+    "size": "82608761251b4164ac0dc985d45634df",
+    "location": "8a993813f61b40809c0de304beddb55b",
+    "key": "50bc1eefc74c4a929476b6d3225725bb",
+    "monitoring": True
+}
 
 
 class MistClient(object):
@@ -28,6 +40,11 @@ class MistClient(object):
             return monitoring.get("monitored_machines")
         return None
 
+    def create_machine(self, data):
+        print(requests.post(self.url + '/api/v1/clouds/' +
+                            data["cloud"] + '/machines', json=data,
+                            headers=self._get_headers()).text)
+
 
 class TsfdbClient(object):
     def __init__(self, url):
@@ -46,7 +63,8 @@ class TsfdbClient(object):
               int(min(time_per_request.values()).microseconds * 0.001))
         data_dict = {}
         for d in data:
-            data_dict.update(d)
+            if d:
+                data_dict.update(d)
         return data_dict
 
     async def _get_datapoints(self, resources, time_per_request):
@@ -70,7 +88,7 @@ class TsfdbClient(object):
         time_per_request[resource] = dt_after - dt_before
         if data.ok:
             data = data.json()
-            return data["series"]
+            return data.get("series")
         return None
 
 
@@ -115,7 +133,22 @@ def check_late_datapoints(data, timestamp, max_acceptable_delay=30):
     print("Max datapoints delay was %.3f s" % max_delay)
 
 
-def main():
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "m:i:")
+    except getopt.GetoptError as err:
+        print('validation.py -m <num_of_machines> -i <id_of_first_machine>')
+        sys.exit(2)
+
+    num_of_machines = 0
+    id_of_first_machine = 0
+
+    for opt, arg in opts:
+        if opt == '-m':
+            num_of_machines = int(arg)
+        elif opt == "-i":
+            id_of_first_machine = int(arg)
+
     mist = MistClient(mist_url, token)
     monitored_resources = list(mist.get_monitored_resources().keys())
     assert monitored_resources
@@ -128,6 +161,13 @@ def main():
     check_inorder_datapoints(data)
     check_late_datapoints(data, datetime.timestamp(dt))
 
+    if num_of_machines:
+        print("Creating %d machines" % num_of_machines)
+        for i in range(id_of_first_machine,
+                       id_of_first_machine + num_of_machines):
+            machine_data["name"] = "tsfdb-stress-test%d" % i
+            mist.create_machine(machine_data)
+
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
