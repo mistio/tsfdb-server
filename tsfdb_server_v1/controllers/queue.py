@@ -271,27 +271,29 @@ class Queue:
                 if e.code != 1020:
                     tr.on_error(e.code).wait()
                     continue
+            while 1:
+                try:
+                    tr.reset()
+                    value = tr[waitKey]
+                    result = tr[resultKey]
 
-            try:
-                tr.reset()
-                value = tr[waitKey]
-                result = tr[resultKey]
+                    # If waitKey is present, then we have not been fulfilled
+                    if value.present():
+                        time.sleep(backoff)
+                        backoff = min(1, backoff * 2)
+                        continue
 
-                # If waitKey is present, then we have not been fulfilled
-                if value.present():
-                    time.sleep(backoff)
-                    backoff = min(1, backoff * 2)
-                    continue
+                    if not result.present():
+                        return None
 
-                if not result.present():
-                    return None
+                    del tr[resultKey]
+                    tr.commit().wait()
+                    return result
 
-                del tr[resultKey]
-                tr.commit().wait()
-                return result
-
-            except fdb.FDBError as e:
-                tr.on_error(e.code).wait()
+                except fdb.FDBError as e:
+                    if e.code != 1020:
+                        tr.on_error(e.code).wait()
+                        break
 
 
 ##################
