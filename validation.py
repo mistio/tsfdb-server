@@ -10,7 +10,7 @@ token = "token"
 
 machine_data = {
     "cloud": "359f5325870f4fa4bee7e8de4ef3e4da",
-    "name": "tsfdb_stress_test00",
+    "name": "tsfdb-stress-test0",
     "image": "a9790c9a4d3f4e5ea17fa6415f394c87",
     "size": "82608761251b4164ac0dc985d45634df",
     "location": "8a993813f61b40809c0de304beddb55b",
@@ -128,8 +128,8 @@ def check_late_datapoints(data, timestamp, max_acceptable_delay=30):
                             datapoints[len(datapoints)-1][1])
             if (timestamp - datapoints[len(datapoints)-1][1]) \
                     > max_acceptable_delay:
-                print("Over %ds delay in datapoints for resource with id: %d"
-                      % max_acceptable_delay, resource)
+                print("Over %ds delay in datapoints for resource with id: %s"
+                      % (max_acceptable_delay, resource))
     print("Max datapoints delay was %.3f s" % max_delay)
 
 
