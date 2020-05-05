@@ -11,7 +11,7 @@ from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
     generate_metric, div_datapoints, profile, is_regex
-from .queue import Queue, Subspace
+from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
 from tsfdb_server_v1.models.error import Error  # noqa: E501
@@ -329,7 +329,7 @@ def write_lines(tr, monitoring, available_metrics, lines):
 def write_in_queue(data):
     try:
         db = open_db()
-        queue = Queue(Subspace(('queue',)))
+        queue = Queue(fdb.Subspace(('queue',)))
         queue.push(db, data)
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:
