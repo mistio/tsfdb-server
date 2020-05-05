@@ -6,6 +6,7 @@ import requests
 import logging
 import traceback
 import urllib.parse
+import os
 import struct
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
@@ -329,7 +330,7 @@ def write_lines(tr, monitoring, available_metrics, lines):
 def write_in_queue(data):
     try:
         db = open_db()
-        queue = Queue(fdb.Subspace(('queue',)))
+        queue = Queue(fdb.Subspace(('queue', os.uname()[1])))
         queue.push(db, data)
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:
