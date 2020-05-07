@@ -7,6 +7,7 @@ from datetime import datetime
 mist_url = "http://dogfood2-mist-api"
 tsfdb_url = "http://localhost:8080"
 token = "token"
+default_resource_name = "tsfdb-stress-test"
 
 machine_data = {
     "cloud": "359f5325870f4fa4bee7e8de4ef3e4da",
@@ -40,9 +41,22 @@ class MistClient(object):
             return monitoring.get("monitored_machines")
         return None
 
+    def get_all_resources(self):
+        resources = requests.get(self.url + '/api/v1/machines',
+                                 headers=self._get_headers())
+        if resources.ok:
+            resources = resources.json()
+            return resources
+        return None
+
     def create_machine(self, data):
         print(requests.post(self.url + '/api/v1/clouds/' +
                             data["cloud"] + '/machines', json=data,
+                            headers=self._get_headers()).text)
+
+    def delete_machine(self, machine_id):
+        print(requests.post(self.url + '/api/v1/machines/' +
+                            machine_id, json={'action': 'destroy'},
                             headers=self._get_headers()).text)
 
 
@@ -133,10 +147,29 @@ def check_late_datapoints(data, timestamp, max_acceptable_delay=30):
     print("Max datapoints delay was %.3f s" % max_delay)
 
 
+def get_resources_mist_ids(id_of_first_machine, num_of_machines, resources):
+    resources_names = set(("%s%i" % (default_resource_name, i)) for i in range(
+        id_of_first_machine, id_of_first_machine + num_of_machines))
+    resources_mist_ids = []
+    for resource in resources:
+        if resource.get("name") in resources_names:
+            resources_mist_ids.append(resource.get("id"))
+
+    return resources_mist_ids
+
+
+def delete_resources(id_of_first_machine, num_of_machines):
+    mist = MistClient(mist_url, token)
+    resources = mist.get_all_resources()
+    for resource_id in get_resources_mist_ids(id_of_first_machine,
+                                              num_of_machines, resources):
+        mist.delete_machine(resource_id)
+
+
 def main(argv):
     try:
         opts, args = getopt.getopt(argv, "m:i:")
-    except getopt.GetoptError as err:
+    except getopt.GetoptError:
         print('validation.py -m <num_of_machines> -i <id_of_first_machine>')
         sys.exit(2)
 
@@ -165,8 +198,10 @@ def main(argv):
         print("Creating %d machines" % num_of_machines)
         for i in range(id_of_first_machine,
                        id_of_first_machine + num_of_machines):
-            machine_data["name"] = "tsfdb-stress-test%d" % i
+            machine_data["name"] = "%s%d" % (default_resource_name, i)
             mist.create_machine(machine_data)
+
+    delete_resources(0, 1)
 
 
 if __name__ == "__main__":
