@@ -158,50 +158,79 @@ def get_resources_mist_ids(id_of_first_machine, num_of_machines, resources):
     return resources_mist_ids
 
 
-def delete_resources(id_of_first_machine, num_of_machines):
-    mist = MistClient(mist_url, token)
+def delete_resources(id_of_first_machine, num_of_machines, mist):
+    print("Deleting %d machines" % num_of_machines)
     resources = mist.get_all_resources()
     for resource_id in get_resources_mist_ids(id_of_first_machine,
                                               num_of_machines, resources):
         mist.delete_machine(resource_id)
 
 
-def main(argv):
-    try:
-        opts, args = getopt.getopt(argv, "m:i:")
-    except getopt.GetoptError:
-        print('validation.py -m <num_of_machines> -i <id_of_first_machine>')
-        sys.exit(2)
+def create_resources(id_of_first_machine, num_of_machines, mist):
+    print("Creating %d machines" % num_of_machines)
+    for i in range(id_of_first_machine,
+                   id_of_first_machine + num_of_machines):
+        machine_data["name"] = "%s%d" % (default_resource_name, i)
+        mist.create_machine(machine_data)
 
-    num_of_machines = 0
-    id_of_first_machine = 0
 
-    for opt, arg in opts:
-        if opt == '-m':
-            num_of_machines = int(arg)
-        elif opt == "-i":
-            id_of_first_machine = int(arg)
-
-    mist = MistClient(mist_url, token)
+def check_resources(mist, tsfdb):
+    print("Checking monitored machines")
     monitored_resources = list(mist.get_monitored_resources().keys())
     assert monitored_resources
     print("Number of monitored resources: %s" %
           len(monitored_resources))
-    tsfdb = TsfdbClient(tsfdb_url)
     dt = datetime.now()
     data = tsfdb.get_datapoints_from_resources(monitored_resources)
     check_missing_datapoints(data)
     check_inorder_datapoints(data)
     check_late_datapoints(data, datetime.timestamp(dt))
 
-    if num_of_machines:
-        print("Creating %d machines" % num_of_machines)
-        for i in range(id_of_first_machine,
-                       id_of_first_machine + num_of_machines):
-            machine_data["name"] = "%s%d" % (default_resource_name, i)
-            mist.create_machine(machine_data)
 
-    delete_resources(0, 1)
+def options():
+    print('For checking machines:')
+    print('\tvalidation.py')
+    print('For creating machines:')
+    print('\tvalidation.py -m <num_of_machines> -i <id_of_first_machine>')
+    print('For deleting machines:')
+    print('\tvalidation.py -m <num_of_machines> -i <id_of_first_machine> -d')
+
+
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "m:i:dh")
+    except getopt.GetoptError:
+        options()
+        sys.exit(2)
+
+    num_of_machines = 0
+    id_of_first_machine = 0
+    delete = False
+    stats = True
+
+    if opts:
+        stats = False
+
+    for opt, arg in opts:
+        if opt == '-m':
+            num_of_machines = int(arg)
+        elif opt == "-i":
+            id_of_first_machine = int(arg)
+        elif opt == "-d":
+            delete = True
+        elif opt == "-h":
+            options()
+            return
+
+    mist = MistClient(mist_url, token)
+    tsfdb = TsfdbClient(tsfdb_url)
+
+    if stats:
+        check_resources(mist, tsfdb)
+    elif delete:
+        delete_resources(id_of_first_machine, num_of_machines, mist)
+    else:
+        create_resources(id_of_first_machine, num_of_machines, mist)
 
 
 if __name__ == "__main__":
