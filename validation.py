@@ -117,6 +117,7 @@ def calculate_time_intervals(datapoints):
 
 
 def check_missing_datapoints(data):
+    count = 0
     for resource, datapoints in data.items():
         if len(datapoints) == 0:
             print("No datapoints for resource with id: %s" % resource)
@@ -124,6 +125,8 @@ def check_missing_datapoints(data):
             intervals = calculate_time_intervals(datapoints)
             if min(intervals) != max(intervals):
                 print("Missing datapoints for resource with id: %s" % resource)
+                count += 1
+    print("Missing datapoints for %d resources" % count)
 
 
 def check_inorder_datapoints(data):
