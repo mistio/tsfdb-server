@@ -21,16 +21,26 @@
 import os
 import fdb
 import fdb.tuple
+from datetime import datetime
 fdb.api_version(620)
 
 
 class Queue:
-    def __init__(self, subspace):
-        self.queue = subspace
+    def __init__(self, name, consumer=False, db=None):
+        self.queue = fdb.Subspace(('queue', name))
+        self.last_push = fdb.Subspace(('last_push', name))
+        self.last_pop = fdb.Subspace(('last_pop', name))
+        if not consumer:
+            print("Creating queue: %s" % (name))
+            db[fdb.Subspace(('available_queues', name))] = fdb.tuple.pack((0,))
 
     @fdb.transactional
     def pop(self, tr):
         item = self.first_item(tr)
+        # Update the timestamp in order to indicate
+        # that this queue is being served by a consumer
+        tr[self.last_pop] = fdb.tuple.pack(
+            (int(datetime.now().timestamp()),))
         if item is None:
             return None
         del tr[item.key]
@@ -38,7 +48,10 @@ class Queue:
 
     @fdb.transactional
     def push(self, tr, value):
-        tr[self.queue[self.last_index(tr) + 1][os.urandom(20)]] = fdb.tuple.pack((value,))
+        tr[self.last_push] = fdb.tuple.pack(
+            (int(datetime.now().timestamp()),))
+        tr[self.queue[self.last_index(tr) + 1][os.urandom(20)]] = \
+            fdb.tuple.pack((value,))
 
     @fdb.transactional
     def last_index(self, tr):
@@ -53,3 +66,10 @@ class Queue:
         r = self.queue.range()
         for kv in tr.get_range(r.start, r.stop, limit=1):
             return kv
+
+    @fdb.transactional
+    def last_push_timestamp(self, tr):
+        last_push = 0
+        if tr[self.last_push].present():
+            last_push = fdb.tuple.unpack(tr[self.last_push])[0]
+        return last_push
