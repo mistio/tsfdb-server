@@ -228,17 +228,6 @@ async def find_datapoints(resource, start, stop, metrics):
                      request=str((resource, start, stop, metrics)))
 
 
-def queue_test():
-    db = open_db()
-    queue = Queue(Subspace(('queue',)))
-    print(queue.peek(db))
-    return
-    item = queue.pop(db)
-    while item:
-        print(item)
-        item = queue.pop(db)
-
-
 def write_tuple(tr, machine_dir, key, value):
     tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
     return True
@@ -400,7 +389,8 @@ def _read_single_proc(resource, metrics, start, stop, step):
         )
         if not raw_machine_data.ok:
             error_msg = (('Got %d on get_stats: %s') %
-                         raw_machine_data.status_code, raw_machine_data.content)
+                         raw_machine_data.status_code,
+                         raw_machine_data.content)
             raise
         return raw_machine_data
     except Exception as err:
@@ -443,7 +433,8 @@ async def read_multiple_proc(resource, metrics, start, stop, step):
                      request=raw_metrics_data.json()['query'])
 
 
-async def _fetch_list(multiple_resources_and_metrics, start="", stop="", step=""):
+async def _fetch_list(multiple_resources_and_metrics, start="",
+                      stop="", step=""):
     data = {}
     loop = asyncio.get_event_loop()
     data_list = [
@@ -480,12 +471,12 @@ def _fetch(resources_and_metrics, start="", stop="", step=""):
             if isinstance(all_metrics, Error):
                 return all_metrics
             if regex_metric == "*":
-                #metrics = [candidate for candidate in all_metrics]
                 if SPLIT_REQUESTS:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     current_data = loop.run_until_complete(
-                        read_multiple_proc(resource, list(all_metrics.keys()), start, stop, step))
+                        read_multiple_proc(resource, list(all_metrics.keys()),
+                                           start, stop, step))
                     return current_data
                 metrics = [candidate for candidate in all_metrics]
             else:

@@ -8,7 +8,6 @@ from tsfdb_server_v1.controllers.queue import Queue
 
 def main():
     db = open_db()
-    num = os.urandom(5)
     queue = Queue(fdb.Subspace(('queue', os.uname()[1])))
     while True:
         try:
