@@ -4,6 +4,11 @@ from datetime import datetime
 from tsfdb_server_v1.controllers.db import open_db, write_in_kv
 from tsfdb_server_v1.controllers.queue import Queue
 
+ACQUIRE_TIMEOUT = 30
+SERVE_TIMEOUT = 1
+DELETE_TIMEOUT = 30
+RETRY_TIMEOUT = 30
+
 
 @fdb.transactional
 def acquire_queue(tr, available_queues):
@@ -14,9 +19,9 @@ def acquire_queue(tr, available_queues):
             if tr[fdb.Subspace(('last_pop', queue_name))].present():
                 last_pop = fdb.tuple.unpack(
                     tr[fdb.Subspace(('last_pop', queue_name))])[0]
-            print(last_pop)
             if last_pop is None or \
-                    int(datetime.now().timestamp()) - last_pop > 30:
+                    int(datetime.now().timestamp()) - \
+                    last_pop > ACQUIRE_TIMEOUT:
                 tr[fdb.Subspace(('last_pop', queue_name))] = fdb.tuple.pack(
                     (int(datetime.now().timestamp()),))
                 return queue_name
@@ -35,8 +40,9 @@ def serve_queue(db, acquired_queue):
             if data:
                 write_in_kv(data)
             else:
-                sleep(1)
-                if int(datetime.now().timestamp()) - queue.last_push_timestamp(db) > 30:
+                sleep(SERVE_TIMEOUT)
+                if int(datetime.now().timestamp()) - \
+                        queue.last_push_timestamp(db) > DELETE_TIMEOUT:
                     delete_queue(db, acquired_queue)
                     print("Deleted queue: %s" % (acquired_queue))
                     return
@@ -60,8 +66,9 @@ def main():
         if acquired_queue:
             serve_queue(db, acquired_queue)
         else:
-            print("Retrying to acquire a queue in 30s")
-            sleep(30)
+            print("Retrying to acquire a queue in %ds" %
+                  RETRY_TIMEOUT)
+            sleep(RETRY_TIMEOUT)
 
 
 if __name__ == "__main__":
