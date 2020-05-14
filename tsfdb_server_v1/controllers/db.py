@@ -33,7 +33,7 @@ TRANSACTION_TIMEOUT = 2000
 
 ########################
 METRICS_PER_REQUEST = 1
-SPLIT_REQUESTS = True
+SPLIT_REQUESTS = False
 ########################
 TSFDB_URI = "http://localhost:8080"
 
