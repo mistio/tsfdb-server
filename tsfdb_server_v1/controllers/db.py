@@ -319,7 +319,7 @@ def write_lines(tr, monitoring, available_metrics, lines):
 def write_in_queue(data):
     try:
         db = open_db()
-        queue = Queue(os.uname()[1], db=db)
+        queue = Queue(os.uname()[1])
         queue.push(db, data)
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:

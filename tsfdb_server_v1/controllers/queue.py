@@ -26,20 +26,22 @@ fdb.api_version(620)
 
 
 class Queue:
-    def __init__(self, name, consumer=False, db=None):
+    def __init__(self, name):
+        self.name = name
         self.queue = fdb.Subspace(('queue', name))
-        self.last_push = fdb.Subspace(('last_push', name))
-        self.last_pop = fdb.Subspace(('last_pop', name))
-        if not consumer:
-            print("Creating queue: %s" % (name))
-            db[fdb.Subspace(('available_queues', name))] = fdb.tuple.pack((0,))
+        self.consumer_lock = fdb.Subspace(('consumer_lock', name))
+        self.available_queue = fdb.Subspace(('available_queues', name))
+
+    @fdb.transactional
+    def register_queue(self, tr):
+        tr[self.available_queue] = fdb.tuple.pack((0,))
 
     @fdb.transactional
     def pop(self, tr):
         item = self.first_item(tr)
         # Update the timestamp in order to indicate
         # that this queue is being served by a consumer
-        tr[self.last_pop] = fdb.tuple.pack(
+        tr[self.consumer_lock] = fdb.tuple.pack(
             (int(datetime.now().timestamp()),))
         if item is None:
             return None
@@ -48,10 +50,10 @@ class Queue:
 
     @fdb.transactional
     def push(self, tr, value):
-        tr[self.last_push] = fdb.tuple.pack(
-            (int(datetime.now().timestamp()),))
+        tr.options.set_retry_limit(-1)
         tr[self.queue[self.last_index(tr) + 1][os.urandom(20)]] = \
             fdb.tuple.pack((value,))
+        self.register_queue(tr)
 
     @fdb.transactional
     def last_index(self, tr):
@@ -68,8 +70,15 @@ class Queue:
             return kv
 
     @fdb.transactional
-    def last_push_timestamp(self, tr):
-        last_push = 0
-        if tr[self.last_push].present():
-            last_push = fdb.tuple.unpack(tr[self.last_push])[0]
-        return last_push
+    def delete(self, tr):
+        del tr[self.queue]
+        del tr[self.consumer_lock]
+        del tr[self.available_queue]
+        print("Deleted queue: %s" % (self.name))
+
+    @fdb.transactional
+    def delete_if_empty(self, tr):
+        if not self.first_item(tr):
+            self.delete(tr)
+            return True
+        return False
