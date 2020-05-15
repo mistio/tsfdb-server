@@ -28,7 +28,6 @@ fdb.api_version(620)
 class Queue:
     def __init__(self, name):
         self.name = name
-        self.queue = fdb.Subspace(('queue', name))
         self.consumer_lock = fdb.Subspace(('consumer_lock', name))
         self.available_queue = fdb.Subspace(('available_queues', name))
 
@@ -51,12 +50,14 @@ class Queue:
     @fdb.transactional
     def push(self, tr, value):
         tr.options.set_retry_limit(-1)
+        self.queue = fdb.directory.create_or_open(tr, ('queue', self.name))
         tr[self.queue[self.last_index(tr) + 1][os.urandom(20)]] = \
             fdb.tuple.pack((value,))
         self.register_queue(tr)
 
     @fdb.transactional
     def last_index(self, tr):
+        self.queue = fdb.directory.create_or_open(tr, ('queue', self.name))
         r = self.queue.range()
         for key, _ in tr.snapshot.get_range(r.start, r.stop, limit=1,
                                             reverse=True):
@@ -65,13 +66,14 @@ class Queue:
 
     @fdb.transactional
     def first_item(self, tr):
+        self.queue = fdb.directory.create_or_open(tr, ('queue', self.name))
         r = self.queue.range()
         for kv in tr.get_range(r.start, r.stop, limit=1):
             return kv
 
     @fdb.transactional
     def delete(self, tr):
-        del tr[self.queue]
+        fdb.directory.remove_if_exists(tr, ('queue', self.name))
         del tr[self.consumer_lock]
         del tr[self.available_queue]
         print("Deleted queue: %s" % (self.name))
