@@ -27,9 +27,13 @@ fdb.api_version(620)
 
 class Queue:
     def __init__(self, name):
-        self.name = name
+        self._name = name
         self.consumer_lock = fdb.Subspace(('consumer_lock', name))
         self.available_queue = fdb.Subspace(('available_queues', name))
+
+    @property
+    def name(self):
+        return self._name
 
     @fdb.transactional
     def register_queue(self, tr):

@@ -3,6 +3,8 @@ from time import sleep
 from datetime import datetime
 from tsfdb_server_v1.controllers.db import open_db, write_in_kv
 from tsfdb_server_v1.controllers.queue import Queue
+from tsfdb_server_v1.controllers.helpers import error
+
 
 ACQUIRE_TIMEOUT = 30
 CONSUME_TIMEOUT = 1
@@ -41,6 +43,8 @@ def consume_queue(db, acquired_queue):
             if err.code != 1020:
                 db.on_error(err.code).wait()
             return
+        except ValueError as err:
+            error(500, "Garbage data in queue: %s" % queue.name, traceback=err)
 
 
 def main():
