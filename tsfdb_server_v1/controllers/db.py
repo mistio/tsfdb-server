@@ -33,10 +33,6 @@ TRANSACTION_TIMEOUT = 2000
 
 CHECK_DUPLICATES = False
 
-########################
-METRICS_PER_REQUEST = 1
-SPLIT_REQUESTS = False
-########################
 TSFDB_URI = "http://localhost:8080"
 
 fdb_dirs = {}
@@ -378,67 +374,6 @@ def write_in_kv(data):
                      request=str(data))
 
 
-def _read_single_proc(resource, metrics, start, stop, step):
-    error_msg = ""
-    resources_and_metrics = ['{resource}.{metric}'.format(
-        resource=resource, metric=metric) for metric in metrics]
-    query = ('fetch({resources_and_metrics}' +
-             ', start=\"{start}\", stop=\"{stop}\"' +
-             ', step=\"{step}\")').format(
-        resources_and_metrics=resources_and_metrics,
-        start=start, stop=stop, step=step)
-    try:
-        raw_machine_data = requests.get(
-            "%s/v1/datapoints?query=%s"
-            % (TSFDB_URI, urllib.parse.quote(str(query))),
-            timeout=5
-        )
-        if not raw_machine_data.ok:
-            error_msg = (('Got %d on get_stats: %s') %
-                         raw_machine_data.status_code,
-                         raw_machine_data.content)
-            raise
-        return raw_machine_data
-    except Exception as err:
-        error_msg += (
-            "%r on _read_single_proc with resource_id: %s" % (
-                err, resource))
-        return error(503, error_msg, traceback=traceback.format_exc(),
-                     request=query)
-
-
-async def read_multiple_proc(resource, metrics, start, stop, step):
-    raw_metrics_data = ""
-    try:
-        n = METRICS_PER_REQUEST
-        loop = asyncio.get_event_loop()
-        data_to_return = {}
-
-        batch_metrics_data = [
-            loop.run_in_executor(None, _read_single_proc, *
-                                 (resource, metrics[l:l+n], start, stop, step))
-            for l in range(0, len(metrics), n)
-        ]
-
-        batch_metrics_data = await asyncio.gather(*batch_metrics_data)
-
-        for raw_metrics_data in batch_metrics_data:
-            metrics_data = raw_metrics_data.json()
-            if isinstance(metrics_data, Error):
-                return metrics_data
-            metrics_data = metrics_data['series']
-            data_to_return.update(metrics_data)
-
-        return data_to_return
-
-    except Exception as err:
-        error_msg = (
-            "%r on read_multiple_proc with resource_id: %s" % (
-                err, resource))
-        return error(503, error_msg, traceback=traceback.format_exc(),
-                     request=raw_metrics_data.json()['query'])
-
-
 async def _fetch_list(multiple_resources_and_metrics, start="",
                       stop="", step=""):
     data = {}
@@ -477,13 +412,6 @@ def _fetch(resources_and_metrics, start="", stop="", step=""):
             if isinstance(all_metrics, Error):
                 return all_metrics
             if regex_metric == "*":
-                if SPLIT_REQUESTS:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    current_data = loop.run_until_complete(
-                        read_multiple_proc(resource, list(all_metrics.keys()),
-                                           start, stop, step))
-                    return current_data
                 metrics = [candidate for candidate in all_metrics]
             else:
                 for candidate in all_metrics:

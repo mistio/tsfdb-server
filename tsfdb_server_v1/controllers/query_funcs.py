@@ -3,7 +3,7 @@ import re
 import numpy as np
 import logging
 from .helpers import round_base, error
-from .db import find_metrics, find_datapoints, read_multiple_proc, _fetch_list
+from .db import find_metrics, find_datapoints, _fetch_list
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
