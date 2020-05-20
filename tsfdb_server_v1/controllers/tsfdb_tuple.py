@@ -6,6 +6,10 @@ from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
+SECONDS_RANGE = 1
+MINUTES_RANGE = 48
+HOURS_RANGE = 1440
+
 
 def key_tuple_second(dt, metric, stat=None):
     return key_tuple_minute(dt, metric, stat) + (dt.second,)
@@ -70,7 +74,7 @@ def start_stop_key_tuples(
 ):
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
-    if time_range_in_hours <= 1:
+    if time_range_in_hours <= SECONDS_RANGE:
         # delta compensates for the range function of foundationdb which
         # for start, stop returns keys in [start, stop). We convert it to
         # the range [start, stop]
@@ -90,8 +94,8 @@ def start_stop_key_tuples(
                 stop + delta, metric)),
         ]
     # if time range is less than 2 days, we create the keys for getting the
-    # summarizeddatapoints per minute
-    elif time_range_in_hours <= 48:
+    # summarized datapoints per minute
+    elif time_range_in_hours <= MINUTES_RANGE:
         delta = timedelta(minutes=1)
         return start_stop_key_tuples_per_resolution(db, start, stop, resource,
                                                     metric, "minute",
@@ -99,7 +103,7 @@ def start_stop_key_tuples(
                                                     stat)
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
-    elif time_range_in_hours <= 1440:
+    elif time_range_in_hours <= HOURS_RANGE:
         delta = timedelta(hours=1)
         return start_stop_key_tuples_per_resolution(db, start, stop, resource,
                                                     metric, "hour",
@@ -117,17 +121,17 @@ def tuple_to_timestamp(time_range_in_hours, tuple_key):
     # if time range is less than an hour, we create the timestamp per second
     # The last 6 items of the tuple contain the date up to the second
     # (year, month, day, hour, minute, second)
-    if time_range_in_hours <= 1:
+    if time_range_in_hours <= SECONDS_RANGE:
         return int(datetime(*tuple_key[-6:]).timestamp())
     # if time range is less than 2 days, we create the timestamp per minute
     # The last 5 items of the tuple contain the date up to the minute
     # (year, month, day, hour, minute)
-    if time_range_in_hours <= 48:
+    if time_range_in_hours <= MINUTES_RANGE:
         return int(datetime(*tuple_key[-5:]).timestamp())
     # if time range is less than 2 months, we create the timestamp per hour
     # The last 4 items of the tuple contain the date up to the hour
     # (year, month, day, hour)
-    if time_range_in_hours <= 1440:
+    if time_range_in_hours <= HOURS_RANGE:
         return int(datetime(*tuple_key[-4:]).timestamp())
     # if time range is more than 2 months, we create the timestamp per day
     # The last 3 items of the tuple contain the date up to the day
@@ -140,7 +144,7 @@ def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key,
     timestamp = tuple_to_timestamp(time_range_in_hours, tuple_key)
     # if the range is less than an hour, we create the appropriate
     # datapoint [value, timestamp]
-    if time_range_in_hours <= 1:
+    if time_range_in_hours <= SECONDS_RANGE:
         return [tuple_value[0], timestamp]
     # else we need to use the summarized values [sum, count, min, max]
     # and convert them to a datapoint [value, timestamp]
