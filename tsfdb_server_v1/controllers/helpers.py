@@ -10,19 +10,17 @@ from tsfdb_server_v1.models.error import Error  # noqa: E501
 log = logging.getLogger(__name__)
 log.setLevel(logging.ERROR)
 
-TSFDB_NOTIFICATIONS_WEBHOOK = ""
-
 
 def round_base(x, precision, base):
     return round(base * round(float(x)/base), precision)
 
 
 def log2slack(log_entry):
-    if not TSFDB_NOTIFICATIONS_WEBHOOK:
+    if not config('TSFDB_NOTIFICATIONS_WEBHOOK'):
         return
 
     response = requests.post(
-        TSFDB_NOTIFICATIONS_WEBHOOK,
+        config('TSFDB_NOTIFICATIONS_WEBHOOK'),
         data=json.dumps({'text': log_entry}),
         headers={'Content-Type': 'application/json'}
     )
@@ -142,3 +140,25 @@ def profile(func):
               (func.__name__, int((end - begin)*1000)))
 
     return wrap
+
+
+def config(name):
+    config_dict = {
+        'AGGREGATE_MINUTE': True,
+        'AGGREGATE_HOUR': True,
+        'AGGREGATE_DAY': True,
+        'DO_NOT_CACHE_FDB_DIRS': False,
+        'TRANSACTION_RETRY_LIMIT': 0,
+        'TRANSACTION_TIMEOUT': 2000,
+        'CHECK_DUPLICATES': False,
+        'TSFDB_URI': "http://localhost:8080",
+        'TSFDB_NOTIFICATIONS_WEBHOOK': "",
+        'ACQUIRE_TIMEOUT': 30,
+        'CONSUME_TIMEOUT': 1,
+        'QUEUE_RETRY_TIMEOUT': 5,
+        'WRITE_IN_QUEUE': True,
+        'SECONDS_RANGE': 1,
+        'MINUTES_RANGE': 48,
+        'HOURS_RANGE': 1440
+    }
+    return config_dict.get(name)

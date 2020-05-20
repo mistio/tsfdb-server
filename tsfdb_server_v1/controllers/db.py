@@ -2,16 +2,14 @@ import asyncio
 import fdb
 import fdb.tuple
 import re
-import requests
 import logging
 import traceback
-import urllib.parse
 import os
 import struct
 from .tsfdb_tuple import tuple_to_datapoint, start_stop_key_tuples, \
     time_aggregate_tuple, key_tuple_second
 from .helpers import metric_to_dict, error, parse_start_stop_params, \
-    generate_metric, div_datapoints, profile, is_regex
+    generate_metric, div_datapoints, profile, is_regex, config
 from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -21,34 +19,21 @@ fdb.api_version(620)
 
 log = logging.getLogger(__name__)
 
-AGGREGATE_MINUTE = True
-AGGREGATE_HOUR = True
-AGGREGATE_DAY = True
-
-DO_NOT_CACHE_FDB_DIRS = False
-
-TRANSACTION_RETRY_LIMIT = 0
-# timeout in ms
-TRANSACTION_TIMEOUT = 2000
-
-CHECK_DUPLICATES = False
-
-TSFDB_URI = "http://localhost:8080"
-
 fdb_dirs = {}
 machine_dirs = {}
 resolutions = ("minute", "hour", "day")
 resolutions_dirs = {}
-resolutions_options = {"minute": AGGREGATE_MINUTE,
-                       "hour": AGGREGATE_HOUR, "day": AGGREGATE_DAY}
+resolutions_options = {"minute": config('AGGREGATE_MINUTE'),
+                       "hour": config('AGGREGATE_HOUR'),
+                       "day": config('AGGREGATE_DAY')}
 
 struct_types = (int, float)
 
 
 def open_db():
     db = fdb.open()
-    db.options.set_transaction_retry_limit(TRANSACTION_RETRY_LIMIT)
-    db.options.set_transaction_timeout(TRANSACTION_TIMEOUT)
+    db.options.set_transaction_retry_limit(config('TRANSACTION_RETRY_LIMIT'))
+    db.options.set_transaction_timeout(config('TRANSACTION_TIMEOUT'))
     return db
 
 
@@ -66,7 +51,8 @@ def find_metrics_from_db(tr, available_metrics, resource):
 def find_metrics(resource):
     try:
         db = open_db()
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('available_metrics'):
+        if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get(
+                'available_metrics'):
             if fdb.directory.exists(db, ('monitoring', 'available_metrics')):
                 fdb_dirs['available_metrics'] = fdb.directory.open(
                     db, ('monitoring', 'available_metrics'))
@@ -98,7 +84,7 @@ def find_resources_from_db(tr, monitoring, regex_resources):
 def find_resources(regex_resources):
     try:
         db = open_db()
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
+        if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get('monitoring'):
             if fdb.directory.exists(db, "monitoring"):
                 fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
             else:
@@ -120,7 +106,8 @@ def find_resources(regex_resources):
 def find_datapoints_from_db(tr, start, stop, time_range_in_hours, resource,
                             metric, stat):
 
-    if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('available_metrics'):
+    if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get(
+            'available_metrics'):
         if fdb.directory.exists(tr, ('monitoring', 'available_metrics')):
             fdb_dirs['available_metrics'] = fdb.directory.open(
                 tr, ('monitoring', 'available_metrics'))
@@ -227,7 +214,7 @@ async def find_datapoints(resource, start, stop, metrics):
 
 
 def write_tuple(tr, machine_dir, key, value):
-    if CHECK_DUPLICATES:
+    if config('CHECK_DUPLICATES'):
         if not tr[machine_dir.pack(key)].present():
             tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
             return True
@@ -287,7 +274,8 @@ def apply_time_aggregation(tr, monitoring, machine,
 @fdb.transactional
 def write_lines(tr, monitoring, available_metrics, lines):
     for resolution in resolutions:
-        if DO_NOT_CACHE_FDB_DIRS or not resolutions_dirs.get(resolution):
+        if config('DO_NOT_CACHE_FDB_DIRS') or not resolutions_dirs.get(
+                resolution):
             resolutions_dirs[resolution] = monitoring.create_or_open(
                 tr, ('metric_per_' + resolution,))
     metrics = {}
@@ -336,10 +324,11 @@ def write_in_kv(data):
     try:
         db = open_db()
 
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('monitoring'):
+        if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get('monitoring'):
             fdb_dirs['monitoring'] = fdb.directory.create_or_open(
                 db, ('monitoring',))
-        if DO_NOT_CACHE_FDB_DIRS or not fdb_dirs.get('available_metrics'):
+        if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get(
+                'available_metrics'):
             fdb_dirs['available_metrics'] = fdb_dirs[
                 'monitoring'].create_or_open(
                 db, ('available_metrics',))

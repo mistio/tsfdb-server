@@ -3,12 +3,7 @@ from time import sleep
 from datetime import datetime
 from tsfdb_server_v1.controllers.db import open_db, write_in_kv
 from tsfdb_server_v1.controllers.queue import Queue
-from tsfdb_server_v1.controllers.helpers import error
-
-
-ACQUIRE_TIMEOUT = 30
-CONSUME_TIMEOUT = 1
-RETRY_TIMEOUT = 5
+from tsfdb_server_v1.controllers.helpers import error, config
 
 
 @fdb.transactional
@@ -21,7 +16,7 @@ def acquire_queue(tr, available_queues):
                 tr[fdb.Subspace(('consumer_lock', queue_name))])[0]
         if consumer_lock is None or \
                 int(datetime.now().timestamp()) - \
-                consumer_lock > ACQUIRE_TIMEOUT:
+                consumer_lock > config('ACQUIRE_TIMEOUT'):
             tr[fdb.Subspace(('consumer_lock', queue_name))] = \
                 fdb.tuple.pack((int(datetime.now().timestamp()),))
             return queue_name
@@ -36,7 +31,7 @@ def consume_queue(db, acquired_queue):
             if data:
                 write_in_kv(data)
             else:
-                sleep(CONSUME_TIMEOUT)
+                sleep(config('CONSUME_TIMEOUT'))
                 if queue.delete_if_empty(db):
                     return
         except fdb.FDBError as err:
@@ -61,8 +56,8 @@ def main():
             consume_queue(db, acquired_queue)
         else:
             print("Retrying to acquire a queue in %ds" %
-                  RETRY_TIMEOUT)
-            sleep(RETRY_TIMEOUT)
+                  config('QUEUE_RETRY_TIMEOUT'))
+            sleep(config('QUEUE_RETRY_TIMEOUT'))
 
 
 if __name__ == "__main__":
