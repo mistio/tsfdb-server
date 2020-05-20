@@ -31,6 +31,8 @@ TRANSACTION_RETRY_LIMIT = 0
 # timeout in ms
 TRANSACTION_TIMEOUT = 2000
 
+CHECK_DUPLICATES = False
+
 ########################
 METRICS_PER_REQUEST = 1
 SPLIT_REQUESTS = False
@@ -229,17 +231,21 @@ async def find_datapoints(resource, start, stop, metrics):
 
 
 def write_tuple(tr, machine_dir, key, value):
+    if CHECK_DUPLICATES:
+        if not tr[machine_dir.pack(key)].present():
+            tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
+            return True
+        saved_value = fdb.tuple.unpack(tr[machine_dir.pack(key)])[0]
+        if saved_value != value:
+            log.error("key: %s already exists with a different value" %
+                      str(key))
+        else:
+            log.warning(
+                "key: %s already exists with the same value" % str(key))
+        return False
+
     tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
     return True
-    """if not tr[machine_dir.pack(key)].present():
-        tr[machine_dir.pack(key)] = fdb.tuple.pack((value,))
-        return True
-    saved_value = fdb.tuple.unpack(tr[machine_dir.pack(key)])[0]
-    if saved_value != value:
-        log.error("key: %s already exists with a different value" % str(key))
-    else:
-        log.warning("key: %s already exists with the same value" % str(key))
-    return False"""
 
 
 def update_metric(tr, available_metrics, metric, metric_type):
