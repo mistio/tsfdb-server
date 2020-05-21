@@ -3,7 +3,7 @@ import re
 import numpy as np
 import logging
 from .helpers import round_base, error
-from .db import find_metrics, find_datapoints, _fetch_list
+from .db import async_fetch_list
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
 
     loop = asyncio.get_event_loop()
     data = loop.run_until_complete(
-        _fetch_list(
+        async_fetch_list(
             multiple_resources_and_metrics, start, stop, step))
 
     return data

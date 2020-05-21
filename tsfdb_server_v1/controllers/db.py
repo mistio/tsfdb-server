@@ -140,9 +140,9 @@ def find_datapoints_from_db(tr, start, stop, time_range_in_hours, resource,
     return datapoints
 
 
-def _find_datapoints_per_metric(db, time_range_in_hours, resource,
-                                machine_dirs, resolutions_dirs, metric,
-                                start, stop):
+def find_datapoints_per_metric(db, time_range_in_hours, resource,
+                               machine_dirs, resolutions_dirs, metric,
+                               start, stop):
     stats = (None,)
     datapoints_per_stat = {}
     if time_range_in_hours > 1:
@@ -177,7 +177,7 @@ def _find_datapoints_per_metric(db, time_range_in_hours, resource,
     return {("%s.%s" % (resource, metric)): datapoints}
 
 
-async def find_datapoints(resource, start, stop, metrics):
+async def async_find_datapoints(resource, start, stop, metrics):
     try:
         loop = asyncio.get_event_loop()
         db = open_db()
@@ -187,7 +187,7 @@ async def find_datapoints(resource, start, stop, metrics):
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
         metrics_data = [
-            loop.run_in_executor(None, _find_datapoints_per_metric, *
+            loop.run_in_executor(None, find_datapoints_per_metric, *
                                  (db,
                                   time_range_in_hours, resource,
                                   machine_dirs, resolutions_dirs,
@@ -206,7 +206,7 @@ async def find_datapoints(resource, start, stop, metrics):
         return data
     except fdb.FDBError as err:
         error_msg = (
-            ("% s on find_datapoints(resource, start, stop"
+            ("% s on async_find_datapoints(resource, start, stop"
                 + ", metrics) with resource_id: % s") % (
                 str(err.description, 'utf-8'), resource))
         return error(503, error_msg, traceback=traceback.format_exc(),
@@ -363,12 +363,12 @@ def write_in_kv(data):
                      request=str(data))
 
 
-async def _fetch_list(multiple_resources_and_metrics, start="",
-                      stop="", step=""):
+async def async_fetch_list(multiple_resources_and_metrics, start="",
+                           stop="", step=""):
     data = {}
     loop = asyncio.get_event_loop()
     data_list = [
-        loop.run_in_executor(None, _fetch, *
+        loop.run_in_executor(None, fetch_item, *
                              (resources_and_metrics, start, stop, step))
         for resources_and_metrics in multiple_resources_and_metrics
     ]
@@ -383,7 +383,7 @@ async def _fetch_list(multiple_resources_and_metrics, start="",
     return data
 
 
-def _fetch(resources_and_metrics, start="", stop="", step=""):
+def fetch_item(resources_and_metrics, start="", stop="", step=""):
     data = {}
     resources, metrics = resources_and_metrics.split(".", 1)
     if is_regex(resources):
@@ -416,7 +416,7 @@ def _fetch(resources_and_metrics, start="", stop="", step=""):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         current_data = loop.run_until_complete(
-            find_datapoints(resource, start, stop, metrics))
+            async_find_datapoints(resource, start, stop, metrics))
         if isinstance(current_data, Error):
             return current_data
         data.update(current_data)
