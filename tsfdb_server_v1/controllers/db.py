@@ -308,6 +308,8 @@ def write_lines(tr, monitoring, available_metrics, lines):
 
 def write_in_queue(data):
     try:
+        if not data:
+            return
         db = open_db()
         queue = Queue(os.uname()[1])
         queue.push(db, data)
@@ -322,6 +324,8 @@ def write_in_queue(data):
 @profile
 def write_in_kv(data):
     try:
+        if not data:
+            return
         db = open_db()
 
         if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get('monitoring'):
@@ -422,3 +426,17 @@ def fetch_item(resources_and_metrics, start="", stop="", step=""):
         data.update(current_data)
 
     return data
+
+
+def seperate_metrics(data):
+    data = data.split('\n')
+    # Get rid of all empty lines
+    data = [line for line in data if line != ""]
+    data_tsfdb = []
+    data_rest = []
+    for line in data:
+        if parse_line(line)["tags"]["machine_id"] == "tsfdb":
+            data_tsfdb.append(line)
+        else:
+            data_rest.append(line)
+    return '\n'.join(data_tsfdb), '\n'.join(data_rest)
