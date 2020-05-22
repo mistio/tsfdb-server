@@ -99,7 +99,8 @@ def decrement_time(dt, resolution):
 
 
 def generate_metric(tags, measurement):
-    del tags["machine_id"], tags["host"]
+    tags.pop("machine_id", None)
+    tags.pop("host", None)
     metric = measurement
     # First sort the tags in alphanumeric order
     tags = sorted(tags.items())
