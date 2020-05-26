@@ -1,11 +1,12 @@
 import fdb
 import json
 import requests
+import os
 from time import sleep
 from datetime import datetime
 
 fdb.api_version(620)
-TSFDB_URI = "http://tsfdb:8080"
+TSFDB_URI = os.getenv('TSFDB_URI', "http://tsfdb:8080")
 
 
 def main():
