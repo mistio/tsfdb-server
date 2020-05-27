@@ -88,3 +88,14 @@ class Queue:
             self.delete(tr)
             return True
         return False
+
+    def count_items(self, db):
+        try:
+            self.queue = fdb.directory.open(db, ('queue', self.name))
+        except ValueError:
+            return 0
+        r = self.queue.range()
+        count = 0
+        for kv in db.get_range(r.start, r.stop):
+            count += 1
+        return count
