@@ -12,17 +12,20 @@ from .helpers import fetch, deriv, write
 log = logging.getLogger(__name__)
 
 
-def fetch_datapoints(query):  # noqa: E501
+def fetch_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
     """Return datapoints within a given time range for given resources &amp; metric name patterns
 
      # noqa: E501
 
     :param query: Comma seperated id&#39;s of the metrics to retrieve datapoints for
     :type query: str
+    :param x_org_id: Organization id
+    :type x_org_id: str
+    :param x_allowed_resources: Allowed resources
+    :type x_allowed_resources: List[str]
 
     :rtype: DatapointsResponse
     """
-
     allowed_funcs = {'__builtins__': safe_builtins,
                      "fetch": fetch, "deriv": deriv}
     try:
@@ -46,15 +49,15 @@ def fetch_datapoints(query):  # noqa: E501
         return DatapointsResponse(query=str(query), series=data)
 
 
-def write_datapoints(body, owner=None):  # noqa: E501
+def write_datapoints(x_org_id, body):  # noqa: E501
     """Write datapoints to db
 
      # noqa: E501
 
+    :param x_org_id: Organization id
+    :type x_org_id: str
     :param body: Datapoints object to write
     :type body:
-    :param owner:
-    :type owner: str
 
     :rtype: None
     """

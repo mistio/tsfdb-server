@@ -19,8 +19,26 @@ paths:
         schema:
           type: string
         style: form
+      - description: Organization id
+        explode: false
+        in: header
+        name: x-org-id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Allowed resources
+        explode: false
+        in: header
+        name: x-allowed-resources
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: simple
       responses:
-        200:
+        "200":
           content:
             application/json:
               schema:
@@ -40,22 +58,23 @@ paths:
     post:
       operationId: write_datapoints
       parameters:
-      - explode: false
+      - description: Organization id
+        explode: false
         in: header
-        name: owner
-        required: false
+        name: x-org-id
+        required: true
         schema:
           type: string
         style: simple
       requestBody:
         content:
-          text/plain:
+          application/json:
             schema:
-              type: string
+              type: object
         description: Datapoints object to write
         required: true
       responses:
-        200:
+        "200":
           description: Write success response
         default:
           content:
@@ -80,8 +99,16 @@ paths:
           format: int32
           type: integer
         style: form
+      - description: Organization id
+        explode: false
+        in: header
+        name: x-org-id
+        required: true
+        schema:
+          type: string
+        style: simple
       responses:
-        200:
+        "200":
           content:
             application/json:
               schema:
@@ -116,8 +143,16 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization id
+        explode: false
+        in: header
+        name: x-org-id
+        required: true
+        schema:
+          type: string
+        style: simple
       responses:
-        200:
+        "200":
           content:
             application/json:
               schema:

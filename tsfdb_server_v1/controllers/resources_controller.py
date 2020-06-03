@@ -7,13 +7,15 @@ from tsfdb_server_v1 import util
 from .helpers import find_metrics
 
 
-def list_metrics_by_resource(resource_id):  # noqa: E501
+def list_metrics_by_resource(resource_id, x_org_id):  # noqa: E501
     """Return metrics and metadata for a specific resource
 
      # noqa: E501
 
     :param resource_id: The id of the resource to retrieve
     :type resource_id: str
+    :param x_org_id: Organization id
+    :type x_org_id: str
 
     :rtype: Resource
     """
