@@ -1,8 +1,8 @@
-connexion >= 2.0.2
+https://gitlab.ops.mist.io/mistio/connexion/-/archive/add-headers-as-params/connexion-add-headers-as-params.zip
 swagger-ui-bundle >= 0.0.2
 python_dateutil >= 2.6.0
 setuptools >= 21.0.0
-foundationdb >= 6.1.11
+foundationdb == 6.2.10
 https://github.com/mistio/dateparser/archive/master.zip
 ipdb >= 0.12.2
 numpy >= 1.17.4

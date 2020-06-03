@@ -163,3 +163,13 @@ def config(name):
         'HOURS_RANGE': 1440
     }
     return config_dict.get(name)
+
+
+def time_range_to_resolution(time_range_in_hours):
+    if time_range_in_hours <= config('SECONDS_RANGE'):
+        return 'second'
+    elif time_range_in_hours <= config('MINUTES_RANGE'):
+        return 'minute'
+    elif time_range_in_hours <= config('HOURS_RANGE'):
+        return 'hour'
+    return 'day'
