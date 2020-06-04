@@ -132,7 +132,7 @@ def write_in_queue(org, data):
         queue.push(db, (org, data))
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:
-        error_msg = ("%s on write_in_queue(data) with resource_id: %s" % (
+        error_msg = ("%s on write_in_queue(data)" % (
             str(err.description, 'utf-8')))
         return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str(data))

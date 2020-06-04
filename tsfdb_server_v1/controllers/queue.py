@@ -53,7 +53,7 @@ class Queue:
 
     @fdb.transactional
     def push(self, tr, value):
-        # tr.options.set_retry_limit(-1)
+        tr.options.set_retry_limit(-1)
         self.queue = fdb.directory.create_or_open(tr, ('queue', self.name))
         tr[self.queue[self.last_index(tr) + 1][os.urandom(20)]] = \
             fdb.tuple.pack((*value,))
