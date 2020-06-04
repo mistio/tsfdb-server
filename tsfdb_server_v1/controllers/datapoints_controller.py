@@ -30,8 +30,7 @@ def fetch_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
     """
     funcs = {"fetch": fetch, "deriv": deriv, "roundX": roundX,
              "roundY": roundY}
-    allowed_params = {'__builtins__': safe_builtins,
-                      "org": x_org_id}.update(funcs)
+    allowed_params = {'__builtins__': safe_builtins}.update(funcs)
     try:
         byte_code = compile_restricted(
             query,
@@ -44,7 +43,7 @@ def fetch_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
         return Error(400, "Bad request")
 
     code = compile(query, "query", "eval")
-    data = eval(code, funcs)
+    data = eval(code, allowed_params)
 
     if isinstance(data, Error):
         return data

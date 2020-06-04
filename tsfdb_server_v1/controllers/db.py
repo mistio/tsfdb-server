@@ -73,7 +73,7 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
         start, stop = parse_start_stop_params(start, stop)
 
         metrics_data = [
-            loop.run_in_executor(None, time_series.find_datapoints_per_metric,
+            loop.run_in_executor(None, time_series.find_datapoints,
                                  *(db, org, resource, metric, start, stop))
             for metric in metrics
         ]
@@ -128,8 +128,6 @@ def write_in_queue(org, data):
         if not data:
             return
         db = open_db()
-        print(db[b'\xff\xff/status/json'])
-        return
         queue = Queue(os.uname()[1])
         queue.push(db, (org, data))
         print("Pushed %d bytes" % len(data.encode('utf-8')))
@@ -200,6 +198,7 @@ async def async_fetch_list(org, multiple_resources_and_metrics, start="",
 def fetch_item(org, resources_and_metrics, start="", stop="", step=""):
     data = {}
     resources, metrics = resources_and_metrics.split(".", 1)
+    db = open_db()
     if is_regex(resources):
         # At the moment we ignore the cases where the resource is a regex
         # resources = find_resources(resources)
@@ -211,7 +210,7 @@ def fetch_item(org, resources_and_metrics, start="", stop="", step=""):
         if is_regex(metrics):
             regex_metric = metrics
             metrics = []
-            all_metrics = find_metrics(resource)
+            all_metrics = time_series.find_metrics(db, org, resource)
             if isinstance(all_metrics, Error):
                 return all_metrics
             if regex_metric == "*":

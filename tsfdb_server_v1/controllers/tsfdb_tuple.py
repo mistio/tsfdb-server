@@ -36,8 +36,7 @@ def key_tuple_day(dt, metric, stat=None):
 
 
 def start_stop_key_tuples(
-        db, time_range_in_hours, resource, machine_dirs,
-        resolutions_dirs, metric, start, stop, stat=None):
+        db, time_range_in_hours, resource, metric, start, stop, stat=None):
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
     if time_range_in_hours <= config('SECONDS_RANGE'):

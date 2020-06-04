@@ -29,7 +29,6 @@ def consume_queue(db, acquired_queue):
         try:
             org, data = queue.pop(db)
             if data:
-                print(org)
                 write_in_kv(org, data)
             else:
                 sleep(config('CONSUME_TIMEOUT'))

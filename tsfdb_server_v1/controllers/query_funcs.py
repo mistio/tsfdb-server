@@ -1,4 +1,5 @@
 import asyncio
+import connexion
 import re
 import numpy as np
 import logging
@@ -35,6 +36,7 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
     # We take for granted that all metrics start with the id and that
     # it ends on the first occurence of a dot, e.g id.system.load1
     data = {}
+    org = connexion.request.headers['x-org-id']
 
     if isinstance(resources_and_metrics, str):
         multiple_resources_and_metrics = [resources_and_metrics]

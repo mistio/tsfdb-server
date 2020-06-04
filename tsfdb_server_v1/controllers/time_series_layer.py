@@ -28,37 +28,44 @@ class TimeSeriesLayer():
                 db, ('monitoring',))
 
     def __get_org_dir(self, db, org):
-        self.__set_monitoring_dir(self, db)
-        if not self.orgs.get(org):
-            self.dir_orgs[org] = self.monitoring.create_or_open(
+        self.__set_monitoring_dir(db)
+        if not self.dir_orgs.get(org):
+            self.dir_orgs[org] = self.dir_monitoring.create_or_open(
                 db, (org,))
         return self.dir_orgs[org]
 
     def __get_resource_dir(self, db, org, resource):
         if not self.dir_resources.get(org, {}).get(resource):
+            if not self.dir_resources.get(org):
+                self.dir_resources[org] = {}
             self.dir_resources[org][resource] = self.__get_org_dir(
-                org).create_or_open(db, (resource))
+                db, org).create_or_open(db, (resource,))
         return self.dir_resources[org][resource]
 
     def __get_available_metrics_dir(self, db, org):
         if not self.dir_available_metrics.get(org):
             self.dir_available_metrics[org] = self.__get_org_dir(
-                org).create_or_open(db, ('available_metrics',))
+                db, org).create_or_open(db, ('available_metrics',))
         return self.dir_available_metrics[org]
 
     def __get_resource_resolution_dir(self, db, org, resource, resolution):
         if not self.dir_resources_resolutions.get(org, {}).get(
                 resource, {}).get(resolution):
+            if not self.dir_resources_resolutions.get(org):
+                self.dir_resources_resolutions[org] = {}
+            if not self.dir_resources_resolutions[org].get(resource):
+                self.dir_resources_resolutions[org][resource] = {}
             self.dir_resources_resolutions[org][resource][resolution] = \
-                self.__get_resource_dir(org, resource).create_or_open(
-                    db, (resolution))
+                self.__get_resource_dir(db, org, resource).create_or_open(
+                    db, (resolution,))
         return self.dir_resources_resolutions[org][resource][resolution]
 
     @fdb.transactional
     def find_metrics(self, tr, org, resource):
         metrics = {}
-        for k, v in tr[self.__get_available_metrics_dir(tr, org).range()]:
-            metric = self.__get_available_metrics_dir(tr, org).unpack(k)[0]
+        for k, v in tr.get_range_startswith(self.__get_available_metrics_dir(
+                tr, org).pack((resource,))):
+            metric = self.__get_available_metrics_dir(tr, org).unpack(k)[1]
             value = fdb.tuple.unpack(v)[0]
             metrics.update(metric_to_dict(metric, value))
         return metrics
@@ -113,12 +120,12 @@ class TimeSeriesLayer():
     def __find_datapoints_per_stat(self, tr, start, stop, time_range_in_hours,
                                    org, resource, metric, stat):
 
-        if not tr[self.__get_available_metrics_dir(self, tr, org).pack(
+        if not tr[self.__get_available_metrics_dir(tr, org).pack(
                 (resource, metric))].present():
             error_msg = "Metric type: %s for resource: %s doesn't exist." % (
                 resource, metric)
             return error(404, error_msg)
-        metric_type_tuple = tr[self.__get_available_metrics_dir(self, tr, org).
+        metric_type_tuple = tr[self.__get_available_metrics_dir(tr, org).
                                pack((resource, metric))]
         metric_type = fdb.tuple.unpack(metric_type_tuple)[0]
 
@@ -150,8 +157,7 @@ class TimeSeriesLayer():
             if not tr[self.__get_resource_resolution_dir(
                     tr, org, resource, resolution).pack(key)].present():
                 tr[self.__get_resource_resolution_dir(
-                    tr, org, resource, resolution).pack(key)] = \
-                    fdb.tuple.pack((value,))
+                    tr, org, resource, resolution).pack(key)] = fdb.tuple.pack((value,))
                 return True
             saved_value = fdb.tuple.unpack(
                 tr[self.__get_resource_resolution_dir(
