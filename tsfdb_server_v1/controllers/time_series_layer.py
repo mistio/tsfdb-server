@@ -157,7 +157,8 @@ class TimeSeriesLayer():
             if not tr[self.__get_resource_resolution_dir(
                     tr, org, resource, resolution).pack(key)].present():
                 tr[self.__get_resource_resolution_dir(
-                    tr, org, resource, resolution).pack(key)] = fdb.tuple.pack((value,))
+                    tr, org, resource, resolution).pack(key)] = fdb.tuple.pack(
+                        (value,))
                 return True
             saved_value = fdb.tuple.unpack(
                 tr[self.__get_resource_resolution_dir(
@@ -171,7 +172,8 @@ class TimeSeriesLayer():
             return False
 
         tr[self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(key)] = fdb.tuple.pack((value,))
+            tr, org, resource, resolution).pack(key)] = fdb.tuple.pack(
+                (value,))
         return True
 
     @fdb.transactional
