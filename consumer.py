@@ -27,8 +27,9 @@ def consume_queue(db, acquired_queue):
     queue = Queue(acquired_queue)
     while True:
         try:
-            org, data = queue.pop(db)
-            if data:
+            item = queue.pop(db)
+            if item:
+                org, data = item
                 write_in_kv(org, data)
             else:
                 sleep(config('CONSUME_TIMEOUT'))
