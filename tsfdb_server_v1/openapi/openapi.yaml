@@ -68,9 +68,9 @@ paths:
         style: simple
       requestBody:
         content:
-          application/json:
+          text/plain:
             schema:
-              type: object
+              type: string
         description: Datapoints object to write
         required: true
       responses:
