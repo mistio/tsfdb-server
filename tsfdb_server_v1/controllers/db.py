@@ -191,9 +191,7 @@ async def async_fetch_list(org, multiple_resources_and_metrics, start="",
 
 def fetch_item(org, resources_and_metrics, start="", stop="", step="",
                authorized_resources=None):
-    data = {}
     resources, metrics = resources_and_metrics.split(".", 1)
-    db = open_db()
     if is_regex(resources):
         regex_resources = resources
         resources = find_resources(
@@ -203,34 +201,61 @@ def fetch_item(org, resources_and_metrics, start="", stop="", step="",
     else:
         resources = [resources]
 
-    for resource in resources:
-        if is_regex(metrics):
-            regex_metric = metrics
-            metrics = []
-            all_metrics = time_series.find_metrics(db, org, resource)
-            if isinstance(all_metrics, Error):
-                return all_metrics
-            if regex_metric == "*":
-                metrics = [candidate for candidate in all_metrics]
-            else:
-                for candidate in all_metrics:
-                    if re.match("^%s$" % regex_metric, candidate):
-                        metrics.append(candidate)
-            if len(metrics) == 0:
-                error_msg = (
-                    "No metrics for regex: \"%s\" where found" % regex_metric
-                )
-                return error(400, error_msg, log)
-        else:
-            metrics = [metrics]
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        current_data = loop.run_until_complete(
-            async_find_datapoints(org, resource, start, stop, metrics))
-        if isinstance(current_data, Error):
-            return current_data
-        data.update(current_data)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
+    data = loop.run_until_complete(
+        async_fetch_item(org, resources, start, stop, metrics))
+    return data
+
+
+async def async_fetch_item(org, resources, start, stop, metrics):
+    data = {}
+    loop = asyncio.get_event_loop()
+    data_list = [
+        loop.run_in_executor(None, find_datapoints_per_resource, *
+                             (org, resource, start, stop, metrics))
+        for resource in resources
+    ]
+
+    data_list = await asyncio.gather(*data_list)
+    for data_item in data_list:
+        if isinstance(data_item, Error):
+            return data_item
+        data.update(data_item)
+
+    return data
+
+
+def find_datapoints_per_resource(org, resource, start, stop, metrics):
+    db = open_db()
+    data = {}
+    if is_regex(metrics):
+        regex_metric = metrics
+        metrics = []
+        all_metrics = time_series.find_metrics(db, org, resource)
+        if isinstance(all_metrics, Error):
+            return all_metrics
+        if regex_metric == "*":
+            metrics = [candidate for candidate in all_metrics]
+        else:
+            for candidate in all_metrics:
+                if re.match("^%s$" % regex_metric, candidate):
+                    metrics.append(candidate)
+        if len(metrics) == 0:
+            error_msg = (
+                "No metrics for regex: \"%s\" where found" % regex_metric
+            )
+            return error(400, error_msg, log)
+    else:
+        metrics = [metrics]
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    current_data = loop.run_until_complete(
+        async_find_datapoints(org, resource, start, stop, metrics))
+    if isinstance(current_data, Error):
+        return current_data
+    data.update(current_data)
     return data
 
 
