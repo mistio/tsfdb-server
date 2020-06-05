@@ -47,7 +47,7 @@ def find_resources(org, regex_resources, authorized_resources=None):
     try:
         db = open_db()
         return time_series.find_resources(db, org, regex_resources,
-                                          authorized_resources=None)
+                                          authorized_resources)
     except fdb.FDBError as err:
         error_msg = (
             "%s on find_resources(regex_resources) with regex_resources: %s"
@@ -169,12 +169,13 @@ def write_in_kv(org, data):
 
 
 async def async_fetch_list(org, multiple_resources_and_metrics, start="",
-                           stop="", step=""):
+                           stop="", step="", authorized_resources=None):
     data = {}
     loop = asyncio.get_event_loop()
     data_list = [
         loop.run_in_executor(None, fetch_item, *
-                             (org, resources_and_metrics, start, stop, step))
+                             (org, resources_and_metrics, start, stop, step,
+                              authorized_resources))
         for resources_and_metrics in multiple_resources_and_metrics
     ]
 
@@ -188,14 +189,15 @@ async def async_fetch_list(org, multiple_resources_and_metrics, start="",
     return data
 
 
-def fetch_item(org, resources_and_metrics, start="", stop="", step=""):
+def fetch_item(org, resources_and_metrics, start="", stop="", step="",
+               authorized_resources=None):
     data = {}
     resources, metrics = resources_and_metrics.split(".", 1)
     db = open_db()
     if is_regex(resources):
         regex_resources = resources
         resources = find_resources(
-            org, regex_resources, authorized_resources=None)
+            org, regex_resources, authorized_resources)
         if isinstance(resources, Error):
             return resources
     else:

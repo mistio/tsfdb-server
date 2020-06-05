@@ -3,6 +3,7 @@ import connexion
 import re
 import numpy as np
 import logging
+import json
 from .helpers import round_base, error
 from .db import async_fetch_list
 from tsfdb_server_v1.models.error import Error  # noqa: E501
@@ -37,6 +38,9 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
     # it ends on the first occurence of a dot, e.g id.system.load1
     data = {}
     org = connexion.request.headers['x-org-id']
+    authorized_resources = connexion.request.headers.get('x-allowed-resources')
+    if authorized_resources:
+        authorized_resources = json.loads(authorized_resources)
 
     if isinstance(resources_and_metrics, str):
         multiple_resources_and_metrics = [resources_and_metrics]
@@ -46,7 +50,8 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
     loop = asyncio.get_event_loop()
     data = loop.run_until_complete(
         async_fetch_list(
-            org, multiple_resources_and_metrics, start, stop, step))
+            org, multiple_resources_and_metrics, start, stop, step,
+            authorized_resources))
 
     return data
 

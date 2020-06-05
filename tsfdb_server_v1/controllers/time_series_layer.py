@@ -78,9 +78,10 @@ class TimeSeriesLayer():
         resources = set(self.__get_org_dir(tr, org).list(tr))
         # Remove reserved directory for metrics
         resources.remove('available_metrics')
-        # Limit the available resources based on mist.api
+        authorized_resources = set(authorized_resources)
+        # Use only authorized resources
         if authorized_resources:
-            resources = resources.union(set(authorized_resources))
+            resources = resources.union(authorized_resources)
         resources = list(resources)
 
         if regex_resources == "*":
