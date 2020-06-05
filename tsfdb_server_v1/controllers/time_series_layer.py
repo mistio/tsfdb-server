@@ -3,7 +3,7 @@ import fdb.tuple
 import logging
 import struct
 from .helpers import metric_to_dict, error, config, div_datapoints, \
-    time_range_to_resolution
+    time_range_to_resolution, config
 from .tsfdb_tuple import tuple_to_datapoint, time_aggregate_tuple, \
     start_stop_key_tuples
 from tsfdb_server_v1.models.error import Error  # noqa: E501
@@ -88,7 +88,7 @@ class TimeSeriesLayer():
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
         stats = (None,)
         datapoints_per_stat = {}
-        if time_range_in_hours > 1:
+        if time_range_in_hours > config('SECONDS_RANGE'):
             stats = ("count", "sum")
 
         for stat in stats:
