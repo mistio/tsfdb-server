@@ -43,17 +43,11 @@ def find_metrics(org, resource):
                      request=resource)
 
 
-def find_resources(regex_resources):
-    """try:
+def find_resources(org, regex_resources, authorized_resources=None):
+    try:
         db = open_db()
-        if config('DO_NOT_CACHE_FDB_DIRS') or not fdb_dirs.get('monitoring'):
-            if fdb.directory.exists(db, "monitoring"):
-                fdb_dirs['monitoring'] = fdb.directory.open(db, "monitoring")
-            else:
-                error_msg = "Monitoring directory doesn't exist."
-                return error(404, error_msg)
-        return find_resources_from_db(
-            db, fdb_dirs['monitoring'], regex_resources)
+        return time_series.find_resources(db, org, regex_resources,
+                                          authorized_resources=None)
     except fdb.FDBError as err:
         error_msg = (
             "%s on find_resources(regex_resources) with regex_resources: %s"
@@ -61,8 +55,7 @@ def find_resources(regex_resources):
                 str(err.description, 'utf-8'),
                 regex_resources))
         return error(503, error_msg, traceback=traceback.format_exc(),
-                     request=regex_resources)"""
-    pass
+                     request=regex_resources)
 
 
 async def async_find_datapoints(org, resource, start, stop, metrics):
@@ -200,9 +193,11 @@ def fetch_item(org, resources_and_metrics, start="", stop="", step=""):
     resources, metrics = resources_and_metrics.split(".", 1)
     db = open_db()
     if is_regex(resources):
-        # At the moment we ignore the cases where the resource is a regex
-        # resources = find_resources(resources)
-        return {}
+        regex_resources = resources
+        resources = find_resources(
+            org, regex_resources, authorized_resources=None)
+        if isinstance(resources, Error):
+            return resources
     else:
         resources = [resources]
 

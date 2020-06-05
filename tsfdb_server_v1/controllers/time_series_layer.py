@@ -1,6 +1,7 @@
 import fdb
 import fdb.tuple
 import logging
+import re
 import struct
 from .helpers import metric_to_dict, error, config, div_datapoints, \
     time_range_to_resolution, config
@@ -71,15 +72,24 @@ class TimeSeriesLayer():
         return metrics
 
     @fdb.transactional
-    def find_resources(self, tr, org, regex_resources):
-        """resources = []
-        for k, v in tr[monitoring["available_resources"].range()]:
-            candidate = monitoring["available_resources"].unpack(k)
-            if re.match("^%s$" % regex_resources, candidate):
-                resources.append(k)
+    def find_resources(self, tr, org, regex_resources,
+                       authorized_resources=None):
+        filtered_resources = []
+        resources = set(self.__get_org_dir(tr, org).list(tr))
+        # Remove reserved directory for metrics
+        resources.remove('available_metrics')
+        # Limit the available resources based on mist.api
+        if authorized_resources:
+            resources = resources.union(set(authorized_resources))
+        resources = list(resources)
 
-        return resources"""
-        pass
+        if regex_resources == "*":
+            filtered_resources = resources
+        else:
+            for resource in resources:
+                if re.match("^%s$" % regex_resources, resource):
+                    filtered_resources.append(resource)
+        return filtered_resources
 
     def find_datapoints(self, db, org, resource,
                         metric, start, stop):
