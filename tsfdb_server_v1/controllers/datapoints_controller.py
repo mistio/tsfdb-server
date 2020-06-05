@@ -7,7 +7,7 @@ from RestrictedPython import safe_builtins
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
-from .query_funcs import fetch, deriv, roundX, roundY
+from .query_funcs import fetch, deriv, roundX, roundY, topk
 from .db import write_in_kv, write_in_queue, seperate_metrics
 from .helpers import config, log2slack
 
@@ -29,7 +29,7 @@ def fetch_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
     :rtype: DatapointsResponse
     """
     funcs = {"fetch": fetch, "deriv": deriv, "roundX": roundX,
-             "roundY": roundY}
+             "roundY": roundY, "topk": topk}
     allowed_params = {'__builtins__': safe_builtins}.update(funcs)
     try:
         byte_code = compile_restricted(
