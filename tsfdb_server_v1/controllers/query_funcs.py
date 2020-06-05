@@ -81,7 +81,10 @@ def topk(data, k=20):
     sum_data = {}
     top_data = {}
     for metric, datapoints in data.items():
-        sum_data[metric] = sum(x for x, y in datapoints)/len(datapoints)
+        if datapoints:
+            sum_data[metric] = sum(x for x, y in datapoints)/len(datapoints)
+        else:
+            sum_data[metric] = 0
     for metric, datapoints in sorted(sum_data.items(),
                                      key=lambda item: item[1],
                                      reverse=True)[0:k]:
