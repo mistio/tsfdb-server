@@ -1,6 +1,6 @@
 FROM python:3-buster
 
-ARG FDB_CLIENT_DEB=https://www.foundationdb.org/downloads/6.2.11/ubuntu/installers/foundationdb-clients_6.2.11-1_amd64.deb
+ARG FDB_CLIENT_DEB=https://www.foundationdb.org/downloads/6.2.20/ubuntu/installers/foundationdb-clients_6.2.20-1_amd64.deb
 ENV FDB_CLIENT_DEB=${FDB_CLIENT_DEB}
 
 RUN apt-get update && \
@@ -26,4 +26,4 @@ EXPOSE 8080
 
 ENTRYPOINT [ "uwsgi" ]
 
-CMD ["--plugins", "python3", "--http", "0.0.0.0:8080", "--enable-threads", "--wsgi-file", "tsfdb_server_v1/__main__.py", "--callable", "application", "--master", "--processes", "3", "--threads", "2"]
+CMD ["--plugins", "python3", "--http", "0.0.0.0:8080", "--wsgi-file", "tsfdb_server_v1/__main__.py", "--callable", "application", "--master", "--processes", "16"]
