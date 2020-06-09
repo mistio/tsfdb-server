@@ -154,7 +154,8 @@ def config(name):
         'TRANSACTION_TIMEOUT': 2000,
         'CHECK_DUPLICATES': False,
         'TSFDB_URI': "http://localhost:8080",
-        'TSFDB_NOTIFICATIONS_WEBHOOK': "",
+        'TSFDB_NOTIFICATIONS_WEBHOOK':
+        os.getenv('TSFDB_NOTIFICATIONS_WEBHOOK'),
         'ACQUIRE_TIMEOUT': 30,
         'CONSUME_TIMEOUT': 1,
         'QUEUE_RETRY_TIMEOUT': 5,
