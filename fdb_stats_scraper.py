@@ -118,7 +118,7 @@ def main():
         requests.post(
             "%s/v1/datapoints"
             % TSFDB_URI,
-            data="\n".join(lines)
+            data="\n".join(lines), headers={'x-org-id': 'tsfdb'}
         )
         sleep(5)
 

@@ -19,7 +19,7 @@ def list_metrics_by_resource(resource_id, x_org_id):  # noqa: E501
 
     :rtype: Resource
     """
-    data = find_metrics(resource_id)
+    data = find_metrics(x_org_id, resource_id)
     if isinstance(data, Error):
         return data
     else:

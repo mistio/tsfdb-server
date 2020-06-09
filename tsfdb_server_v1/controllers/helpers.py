@@ -4,6 +4,7 @@ import requests
 import logging
 import json
 import time
+import os
 from datetime import datetime, timedelta
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
