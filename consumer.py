@@ -1,4 +1,5 @@
 import fdb
+import random
 from time import sleep
 from datetime import datetime
 from tsfdb_server_v1.controllers.db import open_db, write_in_kv
@@ -8,8 +9,11 @@ from tsfdb_server_v1.controllers.helpers import error, config
 
 @fdb.transactional
 def acquire_queue(tr, available_queues):
-    for k, v in tr[available_queues.range()]:
-        queue_name = fdb.tuple.unpack(k)[1]
+    queue_names = []
+    for k, _ in tr[available_queues.range()]:
+        queue_names.append(fdb.tuple.unpack(k)[1])
+    random.shuffle(queue_names)
+    for queue_name in queue_names:
         consumer_lock = None
         if tr[fdb.Subspace(('consumer_lock', queue_name))].present():
             consumer_lock = fdb.tuple.unpack(
@@ -56,9 +60,10 @@ def main():
         if acquired_queue:
             consume_queue(db, acquired_queue)
         else:
+            sleep_time = random.randint(1, config('QUEUE_RETRY_TIMEOUT'))
             print("Retrying to acquire a queue in %ds" %
-                  config('QUEUE_RETRY_TIMEOUT'))
-            sleep(config('QUEUE_RETRY_TIMEOUT'))
+                  sleep_time)
+            sleep(sleep_time)
 
 
 if __name__ == "__main__":

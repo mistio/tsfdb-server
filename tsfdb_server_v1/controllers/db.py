@@ -121,7 +121,7 @@ def write_in_queue(org, data):
         if not data:
             return
         db = open_db()
-        queue = Queue(os.uname()[1])
+        queue = Queue(get_machine_id(data))
         queue.push(db, (org, data))
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:
@@ -271,3 +271,10 @@ def seperate_metrics(data):
         else:
             data_rest.append(line)
     return '\n'.join(data_tsfdb), '\n'.join(data_rest)
+
+
+def get_machine_id(data):
+    data = data.split('\n')
+    # Get rid of all empty lines
+    data = [line for line in data if line != ""]
+    return parse_line(data[0])["tags"]["machine_id"]
