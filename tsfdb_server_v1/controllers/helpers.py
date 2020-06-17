@@ -69,22 +69,28 @@ def parse_start_stop_params(start, stop):
     if not start:
         start = datetime.now() - timedelta(minutes=10)
     else:
-        # Convert "y" to "years" since dateparser doesn't support it
-        # e.g. -2y => -2years
-        start = re.sub("y$", "years", start)
-        start = dateparser.parse(start)
+        start = parse_time(start)
 
     if not stop:
         stop = datetime.now()
     else:
-        stop = re.sub("y$", "years", stop)
-        stop = dateparser.parse(stop)
+        stop = parse_time(stop)
 
     #  round down start and stop time
     start = start.replace(microsecond=0)
     stop = stop.replace(microsecond=0)
 
     return start, stop
+
+
+def parse_time(dt):
+    # Convert "y" to "years" since dateparser doesn't support it
+    # e.g. -2y => -2years
+    return dateparser.parse(re.sub("y$", "years", dt))
+
+
+def parse_relative_time_to_seconds(dt):
+    return round((datetime.now() - parse_time(dt)).total_seconds())
 
 
 def is_regex(string):
