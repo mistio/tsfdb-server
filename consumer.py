@@ -8,13 +8,12 @@ from tsfdb_server_v1.controllers.helpers import error, config
 
 
 @fdb.transactional
-def acquire_queue(tr, available_queues):
-    queue_names = []
-    for k, _ in tr[available_queues.range()]:
-        queue_names.append(fdb.tuple.unpack(k)[1])
-    random.shuffle(queue_names)
+def acquire_queue(tr, available_queues, queue_names):
     for queue_name in queue_names:
         consumer_lock = None
+        queue_names.remove(queue_name)
+        if not tr[available_queues.pack((queue_name,))].present():
+            continue
         if tr[fdb.Subspace(('consumer_lock', queue_name))].present():
             consumer_lock = fdb.tuple.unpack(
                 tr[fdb.Subspace(('consumer_lock', queue_name))])[0]
@@ -51,19 +50,25 @@ def main():
     db = open_db()
     available_queues = fdb.Subspace(('available_queues',))
     while True:
-        try:
-            acquired_queue = acquire_queue(db, available_queues)
-        except fdb.FDBError as err:
-            if err.code != 1020:
-                db.on_error(err.code).wait()
-            acquired_queue = None
-        if acquired_queue:
-            consume_queue(db, acquired_queue)
-        else:
-            sleep_time = random.randint(1, config('QUEUE_RETRY_TIMEOUT'))
-            print("Retrying to acquire a queue in %ds" %
-                  sleep_time)
-            sleep(sleep_time)
+        queue_names = []
+        for k, _ in db[available_queues.range()]:
+            queue_names.append(fdb.tuple.unpack(k)[1])
+        random.shuffle(queue_names)
+        while queue_names:
+            try:
+                acquired_queue = acquire_queue(
+                    db, available_queues, queue_names)
+            except fdb.FDBError as err:
+                if err.code != 1020:
+                    db.on_error(err.code).wait()
+                acquired_queue = None
+            if acquired_queue:
+                consume_queue(db, acquired_queue)
+            else:
+                sleep_time = random.randint(1, config('QUEUE_RETRY_TIMEOUT'))
+                print("Retrying to acquire a queue in %ds" %
+                      sleep_time)
+                sleep(sleep_time)
 
 
 if __name__ == "__main__":
