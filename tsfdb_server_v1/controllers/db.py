@@ -169,12 +169,12 @@ def write_in_kv(org, data):
 
 
 async def async_fetch_list(org, multiple_resources_and_metrics, start="",
-                           stop="", step="", authorized_resources=None):
+                           stop="", authorized_resources=None):
     data = {}
     loop = asyncio.get_event_loop()
     data_list = [
         loop.run_in_executor(None, fetch_item, *
-                             (org, resources_and_metrics, start, stop, step,
+                             (org, resources_and_metrics, start, stop,
                               authorized_resources))
         for resources_and_metrics in multiple_resources_and_metrics
     ]
@@ -189,7 +189,7 @@ async def async_fetch_list(org, multiple_resources_and_metrics, start="",
     return data
 
 
-def fetch_item(org, resources_and_metrics, start="", stop="", step="",
+def fetch_item(org, resources_and_metrics, start="", stop="",
                authorized_resources=None):
     resources, metrics = resources_and_metrics.split(".", 1)
     if is_regex(resources):
