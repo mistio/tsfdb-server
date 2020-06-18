@@ -4,7 +4,7 @@ import re
 import numpy as np
 import logging
 import json
-from .helpers import round_base, error
+from .helpers import round_base, error, parse_relative_time_to_seconds
 from .db import async_fetch_list
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
@@ -33,6 +33,21 @@ def roundY(data, precision=0, base=1):
     return data
 
 
+def mean(data):
+    if not isinstance(data, dict) or not data:
+        return {}
+    for metric, datapoints in data.items():
+        mean_data = {}
+        for value, timestamp in datapoints:
+            if not mean_data.get(timestamp):
+                mean_data[timestamp] = []
+            mean_data[timestamp].append(value)
+        data[metric] = []
+        for timestamp, values in mean_data.items():
+            data[metric].append([sum(values)/len(values), timestamp])
+    return data
+
+
 def fetch(resources_and_metrics, start="", stop="", step=""):
     # We take for granted that all metrics start with the id and that
     # it ends on the first occurence of a dot, e.g id.system.load1
@@ -50,9 +65,10 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
     loop = asyncio.get_event_loop()
     data = loop.run_until_complete(
         async_fetch_list(
-            org, multiple_resources_and_metrics, start, stop, step,
+            org, multiple_resources_and_metrics, start, stop,
             authorized_resources))
-
+    if step:
+        return mean(roundY(data, base=parse_relative_time_to_seconds(step)))
     return data
 
 
