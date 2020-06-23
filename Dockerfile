@@ -1,4 +1,4 @@
-FROM python:3-buster
+FROM python:3.8.2-buster
 
 ARG FDB_CLIENT_DEB=https://www.foundationdb.org/downloads/6.2.20/ubuntu/installers/foundationdb-clients_6.2.20-1_amd64.deb
 ENV FDB_CLIENT_DEB=${FDB_CLIENT_DEB}
