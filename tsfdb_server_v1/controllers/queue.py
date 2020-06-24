@@ -22,6 +22,7 @@ import os
 import fdb
 import fdb.tuple
 from datetime import datetime
+from .helpers import config
 fdb.api_version(620)
 
 
@@ -53,7 +54,7 @@ class Queue:
 
     @fdb.transactional
     def push(self, tr, value):
-        tr.options.set_retry_limit(-1)
+        tr.options.set_retry_limit(config('QUEUE_TRANSACTION_RETRY_LIMIT'))
         self.queue = fdb.directory.create_or_open(tr, ('queue', self.name))
         tr[self.queue[self.last_index(tr) + 1][os.urandom(20)]] = \
             fdb.tuple.pack((*value,))
