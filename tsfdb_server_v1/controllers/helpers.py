@@ -152,13 +152,14 @@ def profile(func):
 
 def config(name):
     config_dict = {
-        'AGGREGATE_MINUTE': os.getenv('AGGREGATE_MINUTE', True),
-        'AGGREGATE_HOUR': os.getenv('AGGREGATE_HOUR', True),
-        'AGGREGATE_DAY': os.getenv('AGGREGATE_DAY', True),
-        'DO_NOT_CACHE_FDB_DIRS': os.getenv('DO_NOT_CACHE_FDB_DIRS', False),
+        'AGGREGATE_MINUTE': (os.getenv('AGGREGATE_MINUTE', 'True') == 'True'),
+        'AGGREGATE_HOUR': (os.getenv('AGGREGATE_HOUR', 'True') == 'True'),
+        'AGGREGATE_DAY': (os.getenv('AGGREGATE_DAY', 'True') == 'True'),
+        'DO_NOT_CACHE_FDB_DIRS':
+        (os.getenv('DO_NOT_CACHE_FDB_DIRS', 'False') == 'True'),
         'TRANSACTION_RETRY_LIMIT': os.getenv('TRANSACTION_RETRY_LIMIT', 0),
         'TRANSACTION_TIMEOUT': os.getenv('TRANSACTION_TIMEOUT', 2000),
-        'CHECK_DUPLICATES': os.getenv('CHECK_DUPLICATES', False),
+        'CHECK_DUPLICATES': (os.getenv('CHECK_DUPLICATES', 'False') == 'True'),
         'TSFDB_URI': os.getenv('TSFDB_URI', "http://localhost:8080"),
         'TSFDB_NOTIFICATIONS_WEBHOOK':
         os.getenv('TSFDB_NOTIFICATIONS_WEBHOOK'),
@@ -167,7 +168,7 @@ def config(name):
         'QUEUE_RETRY_TIMEOUT': os.getenv('QUEUE_RETRY_TIMEOUT', 5),
         'QUEUE_TRANSACTION_RETRY_LIMIT':
         os.getenv('QUEUE_TRANSACTION_RETRY_LIMIT', 3),
-        'WRITE_IN_QUEUE': os.getenv('WRITE_IN_QUEUE', True),
+        'WRITE_IN_QUEUE': (os.getenv('WRITE_IN_QUEUE', 'True') == 'True'),
         'SECONDS_RANGE': os.getenv('SECONDS_RANGE', 1),
         'MINUTES_RANGE': os.getenv('MINUTES_RANGE', 48),
         'HOURS_RANGE': os.getenv('HOURS_RANGE', 1440),
