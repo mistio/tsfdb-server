@@ -3,6 +3,7 @@ import fdb.tuple
 import logging
 import re
 import struct
+from datetime import datetime
 from .helpers import metric_to_dict, error, config, div_datapoints, \
     time_range_to_resolution, config
 from .tsfdb_tuple import tuple_to_datapoint, time_aggregate_tuple, \
@@ -49,16 +50,28 @@ class TimeSeriesLayer():
                 db, org).create_or_open(db, ('available_metrics',))
         return self.dir_available_metrics[org]
 
-    def __get_resource_resolution_dir(self, db, org, resource, resolution):
+    def __get_resource_resolution_dir(self, db, org, resource, resolution,
+                                      bucket=None):
         if not self.dir_resources_resolutions.get(org, {}).get(
                 resource, {}).get(resolution):
             if not self.dir_resources_resolutions.get(org):
                 self.dir_resources_resolutions[org] = {}
             if not self.dir_resources_resolutions[org].get(resource):
                 self.dir_resources_resolutions[org][resource] = {}
-            self.dir_resources_resolutions[org][resource][resolution] = \
-                self.__get_resource_dir(db, org, resource).create_or_open(
-                    db, (resolution,))
+            if not bucket:
+                self.dir_resources_resolutions[org][resource][resolution] = \
+                    self.__get_resource_dir(db, org, resource).create_or_open(
+                        db, (resolution,))
+            else:
+                self.dir_resources_resolutions[org][resource][resolution] = {
+                }
+        if bucket:
+            if not self.dir_resources_resolutions[org][resource][resolution].get(bucket):
+                self.dir_resources_resolutions[org][resource][resolution][bucket] = \
+                    self.__get_resource_dir(db, org, resource).create_or_open(
+                        db, (resolution, bucket,))
+            return self.dir_resources_resolutions[org][resource][resolution][bucket]
+
         return self.dir_resources_resolutions[org][resource][resolution]
 
     @fdb.transactional
@@ -98,9 +111,12 @@ class TimeSeriesLayer():
         time_range = stop - start
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
         stats = (None,)
+        buckets = (None,)
         datapoints_per_stat = {}
         if time_range_in_hours > config('SECONDS_RANGE'):
             stats = ("count", "sum")
+        else:
+            buckets = ['bucket%d' % i for i in range(config('BUCKETS'))]
 
         for stat in stats:
             tuples = start_stop_key_tuples(
@@ -111,25 +127,27 @@ class TimeSeriesLayer():
 
             key_timestamp_start, key_timestamp_stop = tuples
 
-            datapoints_per_stat[stat] = self.__find_datapoints_per_stat(
-                db, key_timestamp_start, key_timestamp_stop,
-                time_range_in_hours, org, resource, metric, stat)
+            datapoints_per_stat[stat] = []
 
-            if isinstance(datapoints_per_stat[stat], Error):
-                return datapoints_per_stat[stat]
-
+            for bucket in buckets:
+                result = self.__find_datapoints_per_stat(
+                    db, key_timestamp_start, key_timestamp_stop,
+                    time_range_in_hours, org, resource, metric, stat, bucket=bucket)
+                if isinstance(result, Error):
+                    return result
+                datapoints_per_stat[stat] += result
         if time_range_in_hours > 1:
-            datapoints = div_datapoints(list(
-                datapoints_per_stat["sum"]),
-                list(datapoints_per_stat["count"]))
+            datapoints = div_datapoints(
+                datapoints_per_stat["sum"],
+                datapoints_per_stat["count"])
         else:
-            datapoints = list(datapoints_per_stat[None])
+            datapoints = sorted(datapoints_per_stat[None], key=lambda x: x[1])
 
         return {("%s.%s" % (resource, metric)): datapoints}
 
     @fdb.transactional
     def __find_datapoints_per_stat(self, tr, start, stop, time_range_in_hours,
-                                   org, resource, metric, stat):
+                                   org, resource, metric, stat, bucket=None):
 
         if not tr[self.__get_available_metrics_dir(tr, org).pack(
                 (resource, metric))].present():
@@ -143,9 +161,9 @@ class TimeSeriesLayer():
         datapoints = []
         resolution = time_range_to_resolution(time_range_in_hours)
         for k, v in tr[self.__get_resource_resolution_dir(
-                tr, org, resource, resolution).pack(start):
+                tr, org, resource, resolution, bucket=bucket).pack(start):
                 self.__get_resource_resolution_dir(tr, org, resource,
-                                                   resolution).pack(stop)]:
+                                                   resolution, bucket=bucket).pack(stop)]:
 
             tuple_key = list(fdb.tuple.unpack(k))
             if time_range_in_hours <= 1:
@@ -164,7 +182,7 @@ class TimeSeriesLayer():
     @fdb.transactional
     def write_datapoint(self, tr, org, resource, key, value,
                         resolution='second'):
-        if config('CHECK_DUPLICATES'):
+        """if config('CHECK_DUPLICATES'):
             if not tr[self.__get_resource_resolution_dir(
                     tr, org, resource, resolution).pack(key)].present():
                 tr[self.__get_resource_resolution_dir(
@@ -180,11 +198,14 @@ class TimeSeriesLayer():
             else:
                 log.warning(
                     "key: %s already exists with the same value" % str(key))
-            return False
+            return False"""
+
+        bucket = 'bucket%d' % (int(datetime.timestamp(
+            datetime.now()) / 60) % config('BUCKETS'))
 
         tr[self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(key)] = fdb.tuple.pack(
-                (value,))
+            tr, org, resource, resolution, bucket=bucket).pack(key)] = \
+            fdb.tuple.pack((value,))
         return True
 
     @fdb.transactional

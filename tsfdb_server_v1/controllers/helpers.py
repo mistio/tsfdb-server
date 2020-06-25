@@ -168,7 +168,8 @@ def config(name):
         'WRITE_IN_QUEUE': True,
         'SECONDS_RANGE': 1,
         'MINUTES_RANGE': 48,
-        'HOURS_RANGE': 1440
+        'HOURS_RANGE': 1440,
+        'BUCKETS': 3
     }
     return config_dict.get(name)
 
