@@ -172,7 +172,8 @@ def config(name):
         'WRITE_IN_QUEUE': (os.getenv('WRITE_IN_QUEUE', 'True') == 'True'),
         'SECONDS_RANGE': int(os.getenv('SECONDS_RANGE', 1)),
         'MINUTES_RANGE': int(os.getenv('MINUTES_RANGE', 48)),
-        'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440))
+        'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440)),
+        'QUEUES': int(os.getenv('QUEUES', -1))
     }
     return config_dict.get(name)
 

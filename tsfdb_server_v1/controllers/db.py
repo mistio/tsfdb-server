@@ -121,7 +121,7 @@ def write_in_queue(org, data):
         if not data:
             return
         db = open_db()
-        queue = Queue(get_machine_id(data))
+        queue = Queue(get_queue_id(data))
         queue.push(db, (org, data))
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:
@@ -278,3 +278,10 @@ def get_machine_id(data):
     # Get rid of all empty lines
     data = [line for line in data if line != ""]
     return parse_line(data[0])["tags"]["machine_id"]
+
+
+def get_queue_id(data):
+    machine_id = get_machine_id(data)
+    if config('QUEUES') == -1:
+        return machine_id
+    return 'q' + str(hash(machine_id) % config('QUEUES'))
