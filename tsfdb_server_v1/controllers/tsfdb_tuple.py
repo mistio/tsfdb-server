@@ -6,29 +6,27 @@ from datetime import datetime, timedelta
 log = logging.getLogger(__name__)
 
 
-def key_tuple_second(dt, metric, stat=None):
-    return key_tuple_minute(dt, metric, stat) + (dt.second,)
+def key_tuple_second(dt, stat=None):
+    return key_tuple_minute(dt, stat) + (dt.second,)
 
 
-def key_tuple_minute(dt, metric, stat=None):
-    return key_tuple_hour(dt, metric, stat) + (dt.minute,)
+def key_tuple_minute(dt, stat=None):
+    return key_tuple_hour(dt, stat) + (dt.minute,)
 
 
-def key_tuple_hour(dt, metric, stat=None):
-    return key_tuple_day(dt, metric, stat) + (dt.hour,)
+def key_tuple_hour(dt, stat=None):
+    return key_tuple_day(dt, stat) + (dt.hour,)
 
 
-def key_tuple_day(dt, metric, stat=None):
+def key_tuple_day(dt, stat=None):
     if stat:
         return (
-            metric,
             stat,
             dt.year,
             dt.month,
             dt.day,
         )
     return (
-        metric,
         dt.year,
         dt.month,
         dt.day,
@@ -36,7 +34,7 @@ def key_tuple_day(dt, metric, stat=None):
 
 
 def start_stop_key_tuples(
-        db, time_range_in_hours, resource, metric, start, stop, stat=None):
+        db, time_range_in_hours, resource, start, stop, stat=None):
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
     if time_range_in_hours <= config('SECONDS_RANGE'):
@@ -46,8 +44,8 @@ def start_stop_key_tuples(
         delta = timedelta(seconds=1)
         # Open the monitoring directory if it exists
         return [
-            key_tuple_second(start, metric),
-            key_tuple_second(stop + delta, metric)
+            key_tuple_second(start),
+            key_tuple_second(stop + delta)
         ]
 
     # if time range is less than 2 days, we create the keys for getting the
@@ -55,23 +53,23 @@ def start_stop_key_tuples(
     elif time_range_in_hours <= config('MINUTES_RANGE'):
         delta = timedelta(minutes=1)
         return [
-            key_tuple_minute(start, metric, stat),
-            key_tuple_minute(stop + delta, metric, stat)
+            key_tuple_minute(start, stat),
+            key_tuple_minute(stop + delta, stat)
         ]
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
     elif time_range_in_hours <= config('HOURS_RANGE'):
         delta = timedelta(hours=1)
         return [
-            key_tuple_hour(start, metric, stat),
-            key_tuple_hour(stop + delta, metric, stat)
+            key_tuple_hour(start, stat),
+            key_tuple_hour(stop + delta, stat)
         ]
     # if time range is more than 2 months, we create the keys for getting
     # the summarized datapoints per day
     delta = timedelta(hours=24)
     return [
-        key_tuple_day(start, metric, stat),
-        key_tuple_day(stop + delta, metric, stat)
+        key_tuple_day(start, stat),
+        key_tuple_day(stop + delta, stat)
     ]
 
 
@@ -112,9 +110,9 @@ def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key,
     return [value, timestamp]
 
 
-def time_aggregate_tuple(metric, stat, dt, resolution):
+def time_aggregate_tuple(stat, dt, resolution):
     if resolution == "minute":
-        return key_tuple_minute(dt, metric, stat)
+        return key_tuple_minute(dt, stat)
     elif resolution == "hour":
-        return key_tuple_hour(dt, metric, stat)
-    return key_tuple_day(dt, metric, stat)
+        return key_tuple_hour(dt, stat)
+    return key_tuple_day(dt, stat)

@@ -105,7 +105,7 @@ def write_lines(tr, org, lines):
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
             if time_series.write_datapoint(tr, org, machine, key_tuple_second(
-                    dt, machine_metric), value):
+                    dt), machine_metric, value):
                 if not (machine_metric in metrics.get(machine)):
                     time_series.add_metric(tr, org,
                                            (machine, machine_metric),
