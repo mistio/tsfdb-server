@@ -6,6 +6,7 @@ import json
 import time
 import os
 from datetime import datetime, timedelta
+from line_protocol_parser import parse_line
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
@@ -144,8 +145,20 @@ def profile(func):
         begin = time.time()
         func(*args, **kwargs)
         end = time.time()
+        dt = int((end - begin)*1000)
+        timestamp = str(int(datetime.now().timestamp())) + 9 * '0'
         print(("Function %s took %d msecs") %
-              (func.__name__, int((end - begin)*1000)))
+              (func.__name__, dt))
+        if config('STATS_LOG_RATE') > 0:
+            if len(args) >= 1 and args[0] != "tsfdb":
+                if int(datetime.now().timestamp()) % \
+                        config('STATS_LOG_RATE') == 0:
+                    line = ((
+                        "stats,machine_id=tsfdb,func=%s" +
+                        " latency=%f %s") %
+                        (func.__name__, dt, timestamp))
+                    from tsfdb_server_v1.controllers.db import write_in_kv
+                    write_in_kv("tsfdb", line + "\n")
 
     return wrap
 
@@ -173,7 +186,8 @@ def config(name):
         'SECONDS_RANGE': int(os.getenv('SECONDS_RANGE', 1)),
         'MINUTES_RANGE': int(os.getenv('MINUTES_RANGE', 48)),
         'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440)),
-        'QUEUES': int(os.getenv('QUEUES', -1))
+        'QUEUES': int(os.getenv('QUEUES', -1)),
+        'STATS_LOG_RATE': int(os.getenv('STATS_LOG_RATE', -1))
     }
     return config_dict.get(name)
 
@@ -186,3 +200,31 @@ def time_range_to_resolution(time_range_in_hours):
     elif time_range_in_hours <= config('HOURS_RANGE'):
         return 'hour'
     return 'day'
+
+
+def seperate_metrics(data):
+    data = data.split('\n')
+    # Get rid of all empty lines
+    data = [line for line in data if line != ""]
+    data_tsfdb = []
+    data_rest = []
+    for line in data:
+        if parse_line(line)["tags"]["machine_id"] == "tsfdb":
+            data_tsfdb.append(line)
+        else:
+            data_rest.append(line)
+    return '\n'.join(data_tsfdb), '\n'.join(data_rest)
+
+
+def get_machine_id(data):
+    data = data.split('\n')
+    # Get rid of all empty lines
+    data = [line for line in data if line != ""]
+    return parse_line(data[0])["tags"]["machine_id"]
+
+
+def get_queue_id(data):
+    machine_id = get_machine_id(data)
+    if config('QUEUES') == -1:
+        return machine_id
+    return 'q' + str(hash(machine_id) % config('QUEUES'))

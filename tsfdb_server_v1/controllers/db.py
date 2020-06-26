@@ -7,7 +7,7 @@ import traceback
 import os
 from .tsfdb_tuple import key_tuple_second
 from .helpers import error, parse_start_stop_params, \
-    generate_metric, profile, is_regex, config
+    generate_metric, profile, is_regex, config, get_queue_id
 from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -116,6 +116,7 @@ def write_lines(tr, org, lines):
                         dt, value, resolution)
 
 
+@profile
 def write_in_queue(org, data):
     try:
         if not data:
@@ -257,31 +258,3 @@ def find_datapoints_per_resource(org, resource, start, stop, metrics):
         return current_data
     data.update(current_data)
     return data
-
-
-def seperate_metrics(data):
-    data = data.split('\n')
-    # Get rid of all empty lines
-    data = [line for line in data if line != ""]
-    data_tsfdb = []
-    data_rest = []
-    for line in data:
-        if parse_line(line)["tags"]["machine_id"] == "tsfdb":
-            data_tsfdb.append(line)
-        else:
-            data_rest.append(line)
-    return '\n'.join(data_tsfdb), '\n'.join(data_rest)
-
-
-def get_machine_id(data):
-    data = data.split('\n')
-    # Get rid of all empty lines
-    data = [line for line in data if line != ""]
-    return parse_line(data[0])["tags"]["machine_id"]
-
-
-def get_queue_id(data):
-    machine_id = get_machine_id(data)
-    if config('QUEUES') == -1:
-        return machine_id
-    return 'q' + str(hash(machine_id) % config('QUEUES'))
