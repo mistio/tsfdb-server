@@ -157,21 +157,22 @@ def config(name):
         'AGGREGATE_DAY': (os.getenv('AGGREGATE_DAY', 'True') == 'True'),
         'DO_NOT_CACHE_FDB_DIRS':
         (os.getenv('DO_NOT_CACHE_FDB_DIRS', 'False') == 'True'),
-        'TRANSACTION_RETRY_LIMIT': os.getenv('TRANSACTION_RETRY_LIMIT', 0),
-        'TRANSACTION_TIMEOUT': os.getenv('TRANSACTION_TIMEOUT', 2000),
+        'TRANSACTION_RETRY_LIMIT':
+        int(os.getenv('TRANSACTION_RETRY_LIMIT', 0)),
+        'TRANSACTION_TIMEOUT': int(os.getenv('TRANSACTION_TIMEOUT', 2000)),
         'CHECK_DUPLICATES': (os.getenv('CHECK_DUPLICATES', 'False') == 'True'),
         'TSFDB_URI': os.getenv('TSFDB_URI', "http://localhost:8080"),
         'TSFDB_NOTIFICATIONS_WEBHOOK':
         os.getenv('TSFDB_NOTIFICATIONS_WEBHOOK'),
-        'ACQUIRE_TIMEOUT': os.getenv('ACQUIRE_TIMEOUT', 30),
-        'CONSUME_TIMEOUT': os.getenv('CONSUME_TIMEOUT', 1),
-        'QUEUE_RETRY_TIMEOUT': os.getenv('QUEUE_RETRY_TIMEOUT', 5),
+        'ACQUIRE_TIMEOUT': float(os.getenv('ACQUIRE_TIMEOUT', 30)),
+        'CONSUME_TIMEOUT': float(os.getenv('CONSUME_TIMEOUT', 1)),
+        'QUEUE_RETRY_TIMEOUT': int(os.getenv('QUEUE_RETRY_TIMEOUT', 5)),
         'QUEUE_TRANSACTION_RETRY_LIMIT':
-        os.getenv('QUEUE_TRANSACTION_RETRY_LIMIT', 3),
+        int(os.getenv('QUEUE_TRANSACTION_RETRY_LIMIT', 3)),
         'WRITE_IN_QUEUE': (os.getenv('WRITE_IN_QUEUE', 'True') == 'True'),
-        'SECONDS_RANGE': os.getenv('SECONDS_RANGE', 1),
-        'MINUTES_RANGE': os.getenv('MINUTES_RANGE', 48),
-        'HOURS_RANGE': os.getenv('HOURS_RANGE', 1440),
+        'SECONDS_RANGE': int(os.getenv('SECONDS_RANGE', 1)),
+        'MINUTES_RANGE': int(os.getenv('MINUTES_RANGE', 48)),
+        'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440))
     }
     return config_dict.get(name)
 
