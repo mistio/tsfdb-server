@@ -72,7 +72,7 @@ def generate_tsfdb_operations_metrics(db, status, timestamp):
         metrics = 0
         try:
             available_metrics = fdb.directory.open(
-                db, (ORG_ID, 'monitoring', 'available_metrics'))
+                db, ('monitoring', ORG_ID, 'available_metrics'))
             for kv in db[available_metrics.range()]:
                 metrics += 1
         except ValueError:
