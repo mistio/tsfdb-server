@@ -220,11 +220,17 @@ async def async_fetch_item(org, resources, start, stop, metrics):
     ]
 
     data_list = await asyncio.gather(*data_list)
+    last_error = None
     for data_item in data_list:
         if isinstance(data_item, Error):
-            return data_item
-        data.update(data_item)
+            if data_item.code // 100 != 4:
+                return data_item
+            last_error = data_item
+        else:
+            data.update(data_item)
 
+    if data == {} and last_error:
+        return last_error
     return data
 
 

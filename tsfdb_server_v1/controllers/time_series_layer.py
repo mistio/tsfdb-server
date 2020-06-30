@@ -134,7 +134,7 @@ class TimeSeriesLayer():
         if not tr[self.__get_available_metrics_dir(tr, org).pack(
                 (resource, metric))].present():
             error_msg = "Metric type: %s for resource: %s doesn't exist." % (
-                resource, metric)
+                metric, resource)
             return error(404, error_msg)
         metric_type_tuple = tr[self.__get_available_metrics_dir(tr, org).
                                pack((resource, metric))]
