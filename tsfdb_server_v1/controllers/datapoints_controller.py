@@ -66,7 +66,9 @@ def write_datapoints(x_org_id, body):  # noqa: E501
     body = str(body, 'utf8')
     if config('WRITE_IN_QUEUE'):
         body_tsfdb, body_rest = seperate_metrics(body)
-        write_in_kv(x_org_id, body_tsfdb)
-        write_in_queue(x_org_id, body_rest)
+        if body_tsfdb:
+            write_in_kv(x_org_id, body_tsfdb)
+        if body_rest:
+            write_in_queue(x_org_id, body_rest)
     else:
         write_in_kv(x_org_id, body)
