@@ -87,7 +87,11 @@ def parse_start_stop_params(start, stop):
 def parse_time(dt):
     # Convert "y" to "years" since dateparser doesn't support it
     # e.g. -2y => -2years
-    return dateparser.parse(re.sub("y$", "years", dt))
+    dt = re.sub("y$", "years", dt)
+    if re.match(".*ms", dt):
+        dt = dt.replace("ms", "")
+        dt = "%ds" % int(float(dt) / 1000)
+    return dateparser.parse(dt)
 
 
 def parse_relative_time_to_seconds(dt):
