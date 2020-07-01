@@ -33,11 +33,6 @@ def consume_queue(db, acquired_queue):
             item = queue.pop(db)
             if item:
                 item = fdb.tuple.unpack(item)
-            else:
-                error(500, "Empty data-values in queue: %s" %
-                      queue.name)
-                continue
-            if item:
                 org, data = item
                 write_in_kv(org, data)
             else:
