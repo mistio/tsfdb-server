@@ -50,7 +50,7 @@ class Queue:
         if item is None:
             return None
         del tr[item.key]
-        return fdb.tuple.unpack(item.value)
+        return item.value
 
     @fdb.transactional
     def push(self, tr, value):
