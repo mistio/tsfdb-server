@@ -92,6 +92,7 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
 @fdb.transactional
 def write_lines(tr, org, lines):
     metrics = {}
+    datapoints_dir = {}
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
@@ -104,16 +105,25 @@ def write_lines(tr, org, lines):
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
+            if not datapoints_dir.get("second"):
+                datapoints_dir["second"] = fdb.directory.create_or_open(
+                    tr, ('monitoring', org, machine, 'second'))
             if time_series.write_datapoint(tr, org, machine, key_tuple_second(
-                    dt, machine_metric), value):
+                dt, machine_metric), value,
+                    datapoints_dir=datapoints_dir['second']):
                 if not (machine_metric in metrics.get(machine)):
                     time_series.add_metric(tr, org,
                                            (machine, machine_metric),
                                            type(value).__name__)
                 for resolution in resolutions:
+                    if not datapoints_dir.get(resolution):
+                        datapoints_dir[resolution] = \
+                            fdb.directory.create_or_open(
+                            tr, ('monitoring', org, machine, resolution))
                     time_series.write_datapoint_aggregated(
                         tr, org, machine, machine_metric,
-                        dt, value, resolution)
+                        dt, value, resolution,
+                        datapoints_dir=datapoints_dir[resolution])
 
 
 @profile

@@ -123,9 +123,10 @@ class TimeSeriesLayer():
 
     @fdb.transactional
     def write_datapoint(self, tr, org, resource, key, value,
-                        resolution='second'):
-        datapoints_dir = fdb.directory.create_or_open(
-            tr, ('monitoring', org, resource, resolution))
+                        resolution='second', datapoints_dir=None):
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
         if config('CHECK_DUPLICATES'):
             if not tr[datapoints_dir.pack(key)].present():
                 tr[datapoints_dir.pack(key)] = fdb.tuple.pack(
@@ -147,7 +148,8 @@ class TimeSeriesLayer():
 
     @fdb.transactional
     def write_datapoint_aggregated(self, tr, org, resource,
-                                   metric, dt, value, resolution):
+                                   metric, dt, value, resolution,
+                                   datapoints_dir=None):
         if type(value) not in self.struct_types:
             log.warning("Unsupported aggregation value type: %s" %
                         str(type(value)))
@@ -158,8 +160,9 @@ class TimeSeriesLayer():
         if not config('AGGREGATE_%s' % resolution.upper()):
             # log something
             return
-        datapoints_dir = fdb.directory.create_or_open(
-            tr, ('monitoring', org, resource, resolution))
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
         tr.add(datapoints_dir.pack(
             time_aggregate_tuple(metric, "count", dt, resolution)),
             struct.pack('<q', 1))
