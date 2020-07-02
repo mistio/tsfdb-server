@@ -108,7 +108,7 @@ class TimeSeriesLayer():
         for k, v in tr[datapoints_dir.pack(start):
                        datapoints_dir.pack(stop)]:
             tuple_key = list(fdb.tuple.unpack(k))
-            if time_range_in_hours <= 1:
+            if time_range_in_hours <= config('SECONDS_RANGE'):
                 tuple_value = list(fdb.tuple.unpack(v))
             else:
                 tuple_value = v
