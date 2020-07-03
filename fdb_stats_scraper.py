@@ -117,11 +117,14 @@ def main():
     while True:
         lines = []
         dt = datetime.now()
+        status = {}
         try:
             status = json.loads(db[b'\xff\xff/status/json'])
         except fdb.FDBError as err:
             print("ERROR: Could not get fdb metrics: %s" %
                   str(err.description, 'utf-8'))
+            sleep(5)
+            continue
         timestamp = str(int(dt.timestamp())) + 9 * '0'
 
         lines += generate_tsfdb_operations_metrics(db, status, timestamp)
