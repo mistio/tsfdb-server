@@ -19,6 +19,12 @@ class TimeSeriesLayer():
         self.struct_types = (int, float)
 
     @fdb.transactional
+    def find_orgs(self, tr):
+        orgs = fdb.directory.create_or_open(
+            tr, ('monitoring')).list(tr)
+        return orgs
+
+    @fdb.transactional
     def find_metrics(self, tr, org, resource):
         metrics = {}
         available_metrics = fdb.directory.create_or_open(
@@ -184,3 +190,34 @@ class TimeSeriesLayer():
                 metric)].present():
             tr[available_metrics.pack(
                 metric)] = fdb.tuple.pack((metric_type,))
+
+    @fdb.transactional
+    def delete_datapoints(self, tr, org, resource,
+                          metric, start, stop, resolution):
+
+        resolutions = {
+            "second": config('SECONDS_RANGE'),
+            "minute": config('MINUTES_RANGE'),
+            "hour": config('HOURS_RANGE'),
+            "day": config('HOURS_RANGE') + 1
+        }
+
+        time_range_in_hours = resolutions.get(
+            resolution, config('SECONDS_RANGE'))
+        stats = (None,)
+        if time_range_in_hours > config('SECONDS_RANGE'):
+            stats = ("count", "sum")
+
+        for stat in stats:
+            tuples = start_stop_key_tuples(
+                tr, time_range_in_hours,
+                resource, metric, start,
+                stop, stat
+            )
+
+            key_timestamp_start, key_timestamp_stop = tuples
+
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
+            tr.clear_range(datapoints_dir.pack(key_timestamp_start),
+                           datapoints_dir.pack(key_timestamp_stop))
