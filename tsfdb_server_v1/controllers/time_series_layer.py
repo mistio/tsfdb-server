@@ -29,7 +29,8 @@ class TimeSeriesLayer():
         metrics = {}
         available_metrics = fdb.directory.create_or_open(
             tr, ('monitoring', org, 'available_metrics'))
-        for k, v in tr.get_range_startswith(available_metrics.pack((resource,))):
+        for k, v in tr.get_range_startswith(available_metrics.pack(
+                (resource,))):
             metric = available_metrics.unpack(k)[1]
             value = fdb.tuple.unpack(v)[0]
             metrics.update(metric_to_dict(metric, value))
@@ -111,8 +112,9 @@ class TimeSeriesLayer():
         resolution = time_range_to_resolution(time_range_in_hours)
         datapoints_dir = fdb.directory.create_or_open(
             tr, ('monitoring', org, resource, resolution))
-        for k, v in tr[datapoints_dir.pack(start):
-                       datapoints_dir.pack(stop)]:
+        for k, v in tr.get_range(datapoints_dir.pack(start),
+                                 datapoints_dir.pack(stop),
+                                 streaming_mode=fdb.StreamingMode.want_all):
             tuple_key = list(fdb.tuple.unpack(k))
             if time_range_in_hours <= config('SECONDS_RANGE'):
                 tuple_value = list(fdb.tuple.unpack(v))
