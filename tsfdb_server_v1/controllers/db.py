@@ -4,7 +4,6 @@ import fdb.tuple
 import re
 import logging
 import traceback
-import os
 from .tsfdb_tuple import key_tuple_second
 from .helpers import error, parse_start_stop_params, \
     generate_metric, profile, is_regex, config, get_queue_id
@@ -96,10 +95,6 @@ def write_lines(tr, org, lines):
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
-        if not metrics.get(machine):
-            machine_metrics = time_series.find_metrics(
-                tr, org, machine)
-            metrics[machine] = {m for m in machine_metrics.keys()}
         metric = generate_metric(
             dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
@@ -111,10 +106,9 @@ def write_lines(tr, org, lines):
             if time_series.write_datapoint(tr, org, machine, key_tuple_second(
                 dt, machine_metric), value,
                     datapoints_dir=datapoints_dir['second']):
-                if not (machine_metric in metrics.get(machine)):
-                    time_series.add_metric(tr, org,
-                                           (machine, machine_metric),
-                                           type(value).__name__)
+                if not metrics.get(machine):
+                    metrics[machine] = set()
+                metrics[machine].add((machine_metric, type(value).__name__))
                 for resolution in resolutions:
                     if not datapoints_dir.get(resolution):
                         datapoints_dir[resolution] = \
@@ -124,6 +118,7 @@ def write_lines(tr, org, lines):
                         tr, org, machine, machine_metric,
                         dt, value, resolution,
                         datapoints_dir=datapoints_dir[resolution])
+    return metrics
 
 
 @profile
@@ -170,13 +165,27 @@ def write_in_kv(org, data):
                      " number of datapoints: %d") % (
             machine, len(metrics), total_datapoints))
 
-        write_lines(db, org, data)
+        metrics = write_lines(db, org, data)
+        update_metrics(db, org, metrics)
     except fdb.FDBError as err:
         error_msg = ("%s on write_in_kv(data) with resource_id: %s" % (
             str(err.description, 'utf-8'),
             parse_line(data[0])["tags"]["machine_id"]))
         return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str(data))
+
+
+@fdb.transactional
+def update_metrics(tr, org, new_metrics):
+    for machine, metrics in new_metrics.items():
+        current_metrics = time_series.find_metrics(
+            tr, org, machine)
+        current_metrics = {m for m in current_metrics.keys()}
+        for metric, metric_type in metrics:
+            if not (metric in current_metrics):
+                time_series.add_metric(tr, org,
+                                       (machine, metric),
+                                       metric_type)
 
 
 async def async_fetch_list(org, multiple_resources_and_metrics, start="",
