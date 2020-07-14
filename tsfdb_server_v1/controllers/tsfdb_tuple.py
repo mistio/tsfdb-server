@@ -36,43 +36,53 @@ def key_tuple_day(dt, metric, stat=None):
 
 
 def start_stop_key_tuples(
-        db, time_range_in_hours, resource, metric, start, stop, stat=None):
+    db, time_range_in_hours, resource, metric, start, stop, stat=None,
+        limit=None):
+    time_boundaries = split_time_range(time_range_in_hours, start, stop, limit)
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
     if time_range_in_hours <= config('SECONDS_RANGE'):
         # delta compensates for the range function of foundationdb which
         # for start, stop returns keys in [start, stop). We convert it to
         # the range [start, stop]
-        delta = timedelta(seconds=1)
-        # Open the monitoring directory if it exists
-        return [
-            key_tuple_second(start, metric),
-            key_tuple_second(stop + delta, metric)
-        ]
+        return [key_tuple_second(time_boundary, metric) for time_boundary
+                in time_boundaries]
 
     # if time range is less than 2 days, we create the keys for getting the
     # summarized datapoints per minute
     elif time_range_in_hours <= config('MINUTES_RANGE'):
-        delta = timedelta(minutes=1)
-        return [
-            key_tuple_minute(start, metric, stat),
-            key_tuple_minute(stop + delta, metric, stat)
-        ]
+        return [key_tuple_minute(time_boundary, metric, stat) for time_boundary
+                in time_boundaries]
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
     elif time_range_in_hours <= config('HOURS_RANGE'):
-        delta = timedelta(hours=1)
-        return [
-            key_tuple_hour(start, metric, stat),
-            key_tuple_hour(stop + delta, metric, stat)
-        ]
+        return [key_tuple_hour(time_boundary, metric, stat) for time_boundary
+                in time_boundaries]
     # if time range is more than 2 months, we create the keys for getting
     # the summarized datapoints per day
-    delta = timedelta(hours=24)
-    return [
-        key_tuple_day(start, metric, stat),
-        key_tuple_day(stop + delta, metric, stat)
-    ]
+    return [key_tuple_day(time_boundary, metric, stat) for time_boundary
+            in time_boundaries]
+
+
+def split_time_range(time_range_in_hours, start, stop, limit):
+    if time_range_in_hours <= config('SECONDS_RANGE'):
+        delta = timedelta(seconds=1)
+    elif time_range_in_hours <= config('MINUTES_RANGE'):
+        delta = timedelta(minutes=1)
+    elif time_range_in_hours <= config('HOURS_RANGE'):
+        delta = timedelta(hours=1)
+    else:
+        delta = timedelta(hours=24)
+    if not limit:
+        return [start, stop + delta]
+    time_ranges = []
+    time_boundary = start
+    while time_boundary < stop:
+        time_ranges.append(time_boundary)
+        time_boundary += delta * limit
+    if time_ranges[-1] < stop + delta:
+        time_ranges.append(stop + delta)
+    return time_ranges
 
 
 def tuple_to_timestamp(time_range_in_hours, tuple_key):

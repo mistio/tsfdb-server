@@ -1,3 +1,4 @@
+import asyncio
 import fdb
 import fdb.tuple
 import logging
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 class TimeSeriesLayer():
     def __init__(self):
         self.struct_types = (int, float)
+        self.limit = config('DATAPOINTS_PER_READ')
 
     @fdb.transactional
     def find_orgs(self, tr):
@@ -68,23 +70,31 @@ class TimeSeriesLayer():
         if time_range_in_hours > config('SECONDS_RANGE'):
             stats = ("count", "sum")
 
+        resolution = time_range_to_resolution(time_range_in_hours)
+        available_metrics = fdb.directory.create_or_open(
+            db, ('monitoring', org, 'available_metrics'))
+        datapoints_dir = fdb.directory.create_or_open(
+            db, ('monitoring', org, resource, resolution))
+
         for stat in stats:
             tuples = start_stop_key_tuples(
                 db, time_range_in_hours,
                 resource, metric, start,
-                stop, stat
+                stop, stat, self.limit
             )
-
-            key_timestamp_start, key_timestamp_stop = tuples
-
-            datapoints_per_stat[stat] = self.__find_datapoints_per_stat(
-                db, key_timestamp_start, key_timestamp_stop,
-                time_range_in_hours, org, resource, metric, stat)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            datapoints_per_stat[stat] = loop.run_until_complete(
+                self.__async_find_datapoints_per_stat(db, tuples,
+                                                      time_range_in_hours,
+                                                      org, resource, metric,
+                                                      stat, datapoints_dir,
+                                                      available_metrics))
 
             if isinstance(datapoints_per_stat[stat], Error):
                 return datapoints_per_stat[stat]
 
-        if time_range_in_hours > 1:
+        if time_range_in_hours > config('SECONDS_RANGE'):
             datapoints = div_datapoints(list(
                 datapoints_per_stat["sum"]),
                 list(datapoints_per_stat["count"]))
@@ -93,12 +103,35 @@ class TimeSeriesLayer():
 
         return {("%s.%s" % (resource, metric)): datapoints}
 
+    async def __async_find_datapoints_per_stat(self, db, tuples,
+                                               time_range_in_hours,
+                                               org, resource, metric, stat,
+                                               datapoints_dir=None,
+                                               available_metrics=None):
+        loop = asyncio.get_event_loop()
+        data_lists = [
+            loop.run_in_executor(None, self.__find_datapoints_per_stat, *
+                                 (db, start, stop, time_range_in_hours,
+                                  org, resource, metric, stat, datapoints_dir,
+                                  available_metrics))
+            for start, stop in zip(tuples, tuples[1:])
+        ]
+
+        data_lists = await asyncio.gather(*data_lists)
+        combined_data_list = []
+        for data_list in data_lists:
+            combined_data_list += data_list
+        return combined_data_list
+
     @fdb.transactional
     def __find_datapoints_per_stat(self, tr, start, stop, time_range_in_hours,
-                                   org, resource, metric, stat):
+                                   org, resource, metric, stat,
+                                   datapoints_dir=None,
+                                   available_metrics=None):
 
-        available_metrics = fdb.directory.create_or_open(
-            tr, ('monitoring', org, 'available_metrics'))
+        if not available_metrics:
+            available_metrics = fdb.directory.create_or_open(
+                tr, ('monitoring', org, 'available_metrics'))
         if not tr[available_metrics.pack(
                 (resource, metric))].present():
             error_msg = "Metric type: %s for resource: %s doesn't exist." % (
@@ -110,8 +143,9 @@ class TimeSeriesLayer():
 
         datapoints = []
         resolution = time_range_to_resolution(time_range_in_hours)
-        datapoints_dir = fdb.directory.create_or_open(
-            tr, ('monitoring', org, resource, resolution))
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
         for k, v in tr.get_range(datapoints_dir.pack(start),
                                  datapoints_dir.pack(stop),
                                  streaming_mode=fdb.StreamingMode.want_all):

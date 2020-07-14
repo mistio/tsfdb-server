@@ -191,7 +191,8 @@ def config(name):
         'MINUTES_RANGE': int(os.getenv('MINUTES_RANGE', 48)),
         'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440)),
         'QUEUES': int(os.getenv('QUEUES', -1)),
-        'STATS_LOG_RATE': int(os.getenv('STATS_LOG_RATE', -1))
+        'STATS_LOG_RATE': int(os.getenv('STATS_LOG_RATE', -1)),
+        'DATAPOINTS_PER_READ': int(os.getenv('DATAPOINTS_PER_READ', 200))
     }
     return config_dict.get(name)
 
