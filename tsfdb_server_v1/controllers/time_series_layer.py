@@ -120,10 +120,22 @@ class TimeSeriesLayer():
             for start, stop in zip(tuples, tuples[1:])
         ]
 
-        data_lists = await asyncio.gather(*data_lists)
+        data_lists = await asyncio.gather(*data_lists, return_exceptions=True)
         combined_data_list = []
+        exceptions = 0
+        last_exception = None
         for data_list in data_lists:
-            combined_data_list += data_list
+            if isinstance(data_list, Exception):
+                exceptions += 1
+                last_exception = data_list
+            else:
+                combined_data_list += data_list
+        if last_exception:
+            if not combined_data_list:
+                raise last_exception
+            error(
+                500, "Got: %d exceptions on __async_find_datapoints_per_stat()"
+                % exceptions, traceback=str(last_exception))
         return combined_data_list
 
     @fdb.transactional

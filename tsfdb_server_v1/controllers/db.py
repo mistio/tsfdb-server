@@ -81,14 +81,25 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
             for metric in metrics
         ]
 
-        metrics_data = await asyncio.gather(*metrics_data)
-
+        metrics_data = await asyncio.gather(*metrics_data,
+                                            return_exceptions=True)
+        exceptions = 0
+        last_exception = None
         for metric_data in metrics_data:
             if isinstance(metric_data, Error):
                 return metric_data
-            if metric_data:
+            if isinstance(metric_data, Exception):
+                exceptions += 1
+                last_exception = metric_data
+            elif metric_data:
                 data.update(metric_data)
-
+        if last_exception:
+            if not data:
+                raise last_exception
+            error(
+                500,
+                "Got exceptions on %d time_series.find_datapoints() instances"
+                % exceptions, traceback=str(last_exception))
         return data
     except fdb.FDBError as err:
         error_msg = (
