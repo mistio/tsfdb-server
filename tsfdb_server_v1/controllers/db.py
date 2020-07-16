@@ -6,7 +6,8 @@ import logging
 import traceback
 from .tsfdb_tuple import key_tuple_second
 from .helpers import error, parse_start_stop_params, \
-    generate_metric, profile, is_regex, config, get_queue_id
+    generate_metric, profile, is_regex, config, get_queue_id, \
+    time_range_to_resolution
 from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -64,9 +65,19 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
         data = {}
         start, stop = parse_start_stop_params(start, stop)
 
+        time_range = stop - start
+        time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
+
+        resolution = time_range_to_resolution(time_range_in_hours)
+        available_metrics = fdb.directory.create_or_open(
+            db, ('monitoring', org, 'available_metrics'))
+        datapoints_dir = fdb.directory.create_or_open(
+            db, ('monitoring', org, resource, resolution))
+
         metrics_data = [
             loop.run_in_executor(None, time_series.find_datapoints,
-                                 *(db, org, resource, metric, start, stop))
+                                 *(db, org, resource, metric, start, stop,
+                                   datapoints_dir, available_metrics))
             for metric in metrics
         ]
 

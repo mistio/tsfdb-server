@@ -61,7 +61,8 @@ class TimeSeriesLayer():
         return filtered_resources
 
     def find_datapoints(self, db, org, resource,
-                        metric, start, stop):
+                        metric, start, stop, datapoints_dir=None,
+                        available_metrics=None):
 
         time_range = stop - start
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
@@ -71,10 +72,12 @@ class TimeSeriesLayer():
             stats = ("count", "sum")
 
         resolution = time_range_to_resolution(time_range_in_hours)
-        available_metrics = fdb.directory.create_or_open(
-            db, ('monitoring', org, 'available_metrics'))
-        datapoints_dir = fdb.directory.create_or_open(
-            db, ('monitoring', org, resource, resolution))
+        if not available_metrics:
+            available_metrics = fdb.directory.create_or_open(
+                db, ('monitoring', org, 'available_metrics'))
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                db, ('monitoring', org, resource, resolution))
 
         for stat in stats:
             tuples = start_stop_key_tuples(
