@@ -86,14 +86,18 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
                                             return_exceptions=True)
         exceptions = 0
         last_exception = None
+        last_error = None
         for metric_data in metrics_data:
             if isinstance(metric_data, Error):
-                return metric_data
-            if isinstance(metric_data, Exception):
+                last_error = metric_data
+            elif isinstance(metric_data, Exception):
                 exceptions += 1
                 last_exception = metric_data
             elif metric_data:
                 data.update(metric_data)
+        if last_error:
+            if not data:
+                return last_error
         if last_exception:
             if not data:
                 raise last_exception

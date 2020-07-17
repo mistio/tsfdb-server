@@ -125,6 +125,8 @@ class TimeSeriesLayer():
         exceptions = 0
         last_exception = None
         for data_list in data_lists:
+            if isinstance(data_list, Error):
+                return data_list
             if isinstance(data_list, Exception):
                 exceptions += 1
                 last_exception = data_list
