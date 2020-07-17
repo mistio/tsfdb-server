@@ -59,6 +59,7 @@ def find_resources(org, regex_resources, authorized_resources=None):
 
 
 async def async_find_datapoints(org, resource, start, stop, metrics):
+    metrics_data = []
     try:
         loop = asyncio.get_event_loop()
         db = open_db()
@@ -98,14 +99,14 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
                 raise last_exception
             error(
                 500,
-                "Got exceptions on %d time_series.find_datapoints() instances"
-                % exceptions, traceback=str(last_exception))
+                "Could not fetch %d/%d metrics from resource: %s"
+                % (exceptions, len(metrics), resource),
+                traceback=str(last_exception))
         return data
     except fdb.FDBError as err:
         error_msg = (
-            ("% s on async_find_datapoints(resource, start, stop"
-                + ", metrics) with resource_id: % s") % (
-                str(err.description, 'utf-8'), resource))
+            ("%s Could not fetch any of the %d metrics from resource: %s") % (
+                str(err.description, 'utf-8'), len(metrics), resource))
         return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str((resource, start, stop, metrics)))
 

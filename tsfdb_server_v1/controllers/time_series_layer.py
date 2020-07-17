@@ -134,8 +134,10 @@ class TimeSeriesLayer():
             if not combined_data_list:
                 raise last_exception
             error(
-                500, "Got: %d exceptions on __async_find_datapoints_per_stat()"
-                % exceptions, traceback=str(last_exception))
+                500, "Could not fetch %d/%d requests for resource," +
+                " metric: (%s, %s)"
+                % (exceptions, len(data_lists), resource, metric),
+                traceback=str(last_exception))
         return combined_data_list
 
     @fdb.transactional
