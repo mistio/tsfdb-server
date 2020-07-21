@@ -13,12 +13,18 @@ spec:
   version: 6.2.20
   faultDomain:
     key: foundationdb.org/none
+  services:
+    headless: true
+  databaseConfiguration:
+    redundancy_mode: {{ .Values.fdb.redundancyMode }}
+    storage_engine: {{ .Values.fdb.storageEngine }}
   processCounts:
-    storage: 5
-    log: 4
-  #  stateless: -1
-  #customParameters:
-  #  - "knob_disable_posix_kernel_aio=1"
+    storage: {{ .Values.fdb.storageProcesses }}
+    log: {{ .Values.fdb.logProcesses }}
+    stateless: {{ .Values.fdb.statelessProcesses }}
+  {{ if .Values.fdb.customParameters -}}
+  customParameters: {{ .Values.fdb.customParameters }}
+  {{- end }}
   processes:
     general:
       volumeClaim:
