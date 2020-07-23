@@ -4,10 +4,10 @@ import fdb.tuple
 import re
 import logging
 import traceback
-import os
 from .tsfdb_tuple import key_tuple_second
 from .helpers import error, parse_start_stop_params, \
-    generate_metric, profile, is_regex, config
+    generate_metric, profile, is_regex, config, get_queue_id, \
+    time_range_to_resolution
 from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -59,32 +59,58 @@ def find_resources(org, regex_resources, authorized_resources=None):
 
 
 async def async_find_datapoints(org, resource, start, stop, metrics):
+    metrics_data = []
     try:
         loop = asyncio.get_event_loop()
         db = open_db()
         data = {}
         start, stop = parse_start_stop_params(start, stop)
 
+        time_range = stop - start
+        time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
+
+        resolution = time_range_to_resolution(time_range_in_hours)
+        available_metrics = fdb.directory.create_or_open(
+            db, ('monitoring', org, 'available_metrics'))
+        datapoints_dir = fdb.directory.create_or_open(
+            db, ('monitoring', org, resource, resolution))
+
         metrics_data = [
             loop.run_in_executor(None, time_series.find_datapoints,
-                                 *(db, org, resource, metric, start, stop))
+                                 *(db, org, resource, metric, start, stop,
+                                   datapoints_dir, available_metrics))
             for metric in metrics
         ]
 
-        metrics_data = await asyncio.gather(*metrics_data)
-
+        metrics_data = await asyncio.gather(*metrics_data,
+                                            return_exceptions=True)
+        exceptions = 0
+        last_exception = None
+        last_error = None
         for metric_data in metrics_data:
             if isinstance(metric_data, Error):
-                return metric_data
-            if metric_data:
+                last_error = metric_data
+            elif isinstance(metric_data, Exception):
+                exceptions += 1
+                last_exception = metric_data
+            elif metric_data:
                 data.update(metric_data)
-
+        if last_error:
+            if not data:
+                return last_error
+        if last_exception:
+            if not data:
+                raise last_exception
+            error(
+                500,
+                "Could not fetch %d/%d metrics from resource: %s"
+                % (exceptions, len(metrics), resource),
+                traceback=str(last_exception))
         return data
     except fdb.FDBError as err:
         error_msg = (
-            ("% s on async_find_datapoints(resource, start, stop"
-                + ", metrics) with resource_id: % s") % (
-                str(err.description, 'utf-8'), resource))
+            ("%s Could not fetch any of the %d metrics from resource: %s") % (
+                str(err.description, 'utf-8'), len(metrics), resource))
         return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str((resource, start, stop, metrics)))
 
@@ -92,36 +118,43 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
 @fdb.transactional
 def write_lines(tr, org, lines):
     metrics = {}
+    datapoints_dir = {}
     for line in lines:
         dict_line = parse_line(line)
         machine = dict_line["tags"]["machine_id"]
-        if not metrics.get(machine):
-            machine_metrics = time_series.find_metrics(
-                tr, org, machine)
-            metrics[machine] = {m for m in machine_metrics.keys()}
         metric = generate_metric(
             dict_line["tags"], dict_line["measurement"])
         dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
         for field, value in dict_line["fields"].items():
             machine_metric = "%s.%s" % (metric, field)
+            if not datapoints_dir.get("second"):
+                datapoints_dir["second"] = fdb.directory.create_or_open(
+                    tr, ('monitoring', org, machine, 'second'))
             if time_series.write_datapoint(tr, org, machine, key_tuple_second(
-                    dt, machine_metric), value):
-                if not (machine_metric in metrics.get(machine)):
-                    time_series.add_metric(tr, org,
-                                           (machine, machine_metric),
-                                           type(value).__name__)
+                dt, machine_metric), value,
+                    datapoints_dir=datapoints_dir['second']):
+                if not metrics.get(machine):
+                    metrics[machine] = set()
+                metrics[machine].add((machine_metric, type(value).__name__))
                 for resolution in resolutions:
+                    if not datapoints_dir.get(resolution):
+                        datapoints_dir[resolution] = \
+                            fdb.directory.create_or_open(
+                            tr, ('monitoring', org, machine, resolution))
                     time_series.write_datapoint_aggregated(
                         tr, org, machine, machine_metric,
-                        dt, value, resolution)
+                        dt, value, resolution,
+                        datapoints_dir=datapoints_dir[resolution])
+    return metrics
 
 
+@profile
 def write_in_queue(org, data):
     try:
         if not data:
             return
         db = open_db()
-        queue = Queue(os.uname()[1])
+        queue = Queue(get_queue_id(data))
         queue.push(db, (org, data))
         print("Pushed %d bytes" % len(data.encode('utf-8')))
     except fdb.FDBError as err:
@@ -159,13 +192,27 @@ def write_in_kv(org, data):
                      " number of datapoints: %d") % (
             machine, len(metrics), total_datapoints))
 
-        write_lines(db, org, data)
+        metrics = write_lines(db, org, data)
+        update_metrics(db, org, metrics)
     except fdb.FDBError as err:
         error_msg = ("%s on write_in_kv(data) with resource_id: %s" % (
             str(err.description, 'utf-8'),
             parse_line(data[0])["tags"]["machine_id"]))
         return error(503, error_msg, traceback=traceback.format_exc(),
                      request=str(data))
+
+
+@fdb.transactional
+def update_metrics(tr, org, new_metrics):
+    for machine, metrics in new_metrics.items():
+        current_metrics = time_series.find_metrics(
+            tr, org, machine)
+        current_metrics = {m for m in current_metrics.keys()}
+        for metric, metric_type in metrics:
+            if not (metric in current_metrics):
+                time_series.add_metric(tr, org,
+                                       (machine, metric),
+                                       metric_type)
 
 
 async def async_fetch_list(org, multiple_resources_and_metrics, start="",
@@ -219,11 +266,17 @@ async def async_fetch_item(org, resources, start, stop, metrics):
     ]
 
     data_list = await asyncio.gather(*data_list)
+    last_error = None
     for data_item in data_list:
         if isinstance(data_item, Error):
-            return data_item
-        data.update(data_item)
+            if data_item.code // 100 != 4:
+                return data_item
+            last_error = data_item
+        else:
+            data.update(data_item)
 
+    if data == {} and last_error:
+        return last_error
     return data
 
 
@@ -257,17 +310,3 @@ def find_datapoints_per_resource(org, resource, start, stop, metrics):
         return current_data
     data.update(current_data)
     return data
-
-
-def seperate_metrics(data):
-    data = data.split('\n')
-    # Get rid of all empty lines
-    data = [line for line in data if line != ""]
-    data_tsfdb = []
-    data_rest = []
-    for line in data:
-        if parse_line(line)["tags"]["machine_id"] == "tsfdb":
-            data_tsfdb.append(line)
-        else:
-            data_rest.append(line)
-    return '\n'.join(data_tsfdb), '\n'.join(data_rest)

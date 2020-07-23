@@ -26,4 +26,4 @@ EXPOSE 8080
 
 ENTRYPOINT [ "uwsgi" ]
 
-CMD ["--plugins", "python3", "--http", "0.0.0.0:8080", "--wsgi-file", "tsfdb_server_v1/__main__.py", "--callable", "application", "--master", "--processes", "16"]
+CMD ["--plugins", "python3", "--http", "0.0.0.0:8080", "--wsgi-file", "tsfdb_server_v1/__main__.py", "--callable", "application", "--master", "--processes", "32", "--max-requests", "100"]

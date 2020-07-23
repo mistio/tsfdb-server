@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chart.fullname" . }}-tsfdb-consumer
+  labels:
+    app: tsfdb-consumer
+    chart: {{ include "chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: tsfdb-consumer
+        release: {{ .Release.Name }}
+    spec:
+{{- if .Values.image.secrets }}
+      imagePullSecrets:
+{{ toYaml .Values.image.secrets | indent 8 }}
+{{- end }}
+      containers:
+      - name: consumer
+        command:
+        - python3
+        args:
+        - consumer.py
+        env:
+        - name: API_URL
+          value: /api/v1/spec
+        image: {{ .Values.image.registry }}/tsfdb:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: fdb-config
+          mountPath: /etc/foundationdb/
+        resources:
+          limits:
+            memory: 900Mi
+            cpu: 1
+          requests:
+            memory: 400Mi
+            cpu: 300m
+      volumes:
+      - name: fdb-config
+        configMap:
+          name: {{ include "chart.fullname" . }}-fdb-config
+          defaultMode: 420
+          items:
+          - key: cluster-file
+            path: fdb.cluster
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}

@@ -6,6 +6,7 @@ import json
 import time
 import os
 from datetime import datetime, timedelta
+from line_protocol_parser import parse_line
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
@@ -86,7 +87,11 @@ def parse_start_stop_params(start, stop):
 def parse_time(dt):
     # Convert "y" to "years" since dateparser doesn't support it
     # e.g. -2y => -2years
-    return dateparser.parse(re.sub("y$", "years", dt))
+    dt = re.sub("y$", "years", dt)
+    if re.match(".*ms", dt):
+        dt = dt.replace("ms", "")
+        dt = "%ds" % int(float(dt) / 1000)
+    return dateparser.parse(dt)
 
 
 def parse_relative_time_to_seconds(dt):
@@ -134,9 +139,13 @@ def generate_metric(tags, measurement):
 
 
 def div_datapoints(datapoints1, datapoints2):
-    return [[d1/d2, t1]
-            for ((d1, t1), (d2, t2)) in zip(datapoints1, datapoints2)
-            if t1 == t2]
+    datapoints1_dict = {t1: d1 for (d1, t1) in datapoints1}
+    datapoints2_dict = {t2: d2 for (d2, t2) in datapoints2}
+    datapoints = []
+    for _, t1 in datapoints1:
+        if datapoints1_dict.get(t1) and datapoints2_dict.get(t1):
+            datapoints.append([datapoints1_dict[t1]/datapoints2_dict[t1], t1])
+    return datapoints
 
 
 def profile(func):
@@ -144,31 +153,50 @@ def profile(func):
         begin = time.time()
         func(*args, **kwargs)
         end = time.time()
+        dt = int((end - begin)*1000)
+        timestamp = str(int(datetime.now().timestamp())) + 9 * '0'
         print(("Function %s took %d msecs") %
-              (func.__name__, int((end - begin)*1000)))
+              (func.__name__, dt))
+        if config('STATS_LOG_RATE') > 0:
+            if len(args) >= 1 and args[0] != "tsfdb":
+                if int(datetime.now().timestamp()) % \
+                        config('STATS_LOG_RATE') == 0:
+                    line = ((
+                        "stats,machine_id=tsfdb,func=%s" +
+                        " latency=%f %s") %
+                        (func.__name__, dt, timestamp))
+                    from tsfdb_server_v1.controllers.db import write_in_kv
+                    write_in_kv("tsfdb", line + "\n")
 
     return wrap
 
 
 def config(name):
     config_dict = {
-        'AGGREGATE_MINUTE': True,
-        'AGGREGATE_HOUR': True,
-        'AGGREGATE_DAY': True,
-        'DO_NOT_CACHE_FDB_DIRS': False,
-        'TRANSACTION_RETRY_LIMIT': 0,
-        'TRANSACTION_TIMEOUT': 2000,
-        'CHECK_DUPLICATES': False,
-        'TSFDB_URI': "http://localhost:8080",
+        'AGGREGATE_MINUTE': (os.getenv('AGGREGATE_MINUTE', 'True') == 'True'),
+        'AGGREGATE_HOUR': (os.getenv('AGGREGATE_HOUR', 'True') == 'True'),
+        'AGGREGATE_DAY': (os.getenv('AGGREGATE_DAY', 'True') == 'True'),
+        'DO_NOT_CACHE_FDB_DIRS':
+        (os.getenv('DO_NOT_CACHE_FDB_DIRS', 'False') == 'True'),
+        'TRANSACTION_RETRY_LIMIT':
+        int(os.getenv('TRANSACTION_RETRY_LIMIT', 0)),
+        'TRANSACTION_TIMEOUT': int(os.getenv('TRANSACTION_TIMEOUT', 2000)),
+        'CHECK_DUPLICATES': (os.getenv('CHECK_DUPLICATES', 'False') == 'True'),
+        'TSFDB_URI': os.getenv('TSFDB_URI', "http://localhost:8080"),
         'TSFDB_NOTIFICATIONS_WEBHOOK':
         os.getenv('TSFDB_NOTIFICATIONS_WEBHOOK'),
-        'ACQUIRE_TIMEOUT': 30,
-        'CONSUME_TIMEOUT': 1,
-        'QUEUE_RETRY_TIMEOUT': 5,
-        'WRITE_IN_QUEUE': True,
-        'SECONDS_RANGE': 1,
-        'MINUTES_RANGE': 48,
-        'HOURS_RANGE': 1440
+        'ACQUIRE_TIMEOUT': float(os.getenv('ACQUIRE_TIMEOUT', 30)),
+        'CONSUME_TIMEOUT': float(os.getenv('CONSUME_TIMEOUT', 1)),
+        'QUEUE_RETRY_TIMEOUT': int(os.getenv('QUEUE_RETRY_TIMEOUT', 5)),
+        'QUEUE_TRANSACTION_RETRY_LIMIT':
+        int(os.getenv('QUEUE_TRANSACTION_RETRY_LIMIT', 3)),
+        'WRITE_IN_QUEUE': (os.getenv('WRITE_IN_QUEUE', 'True') == 'True'),
+        'SECONDS_RANGE': int(os.getenv('SECONDS_RANGE', 1)),
+        'MINUTES_RANGE': int(os.getenv('MINUTES_RANGE', 48)),
+        'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440)),
+        'QUEUES': int(os.getenv('QUEUES', -1)),
+        'STATS_LOG_RATE': int(os.getenv('STATS_LOG_RATE', -1)),
+        'DATAPOINTS_PER_READ': int(os.getenv('DATAPOINTS_PER_READ', 200))
     }
     return config_dict.get(name)
 
@@ -181,3 +209,31 @@ def time_range_to_resolution(time_range_in_hours):
     elif time_range_in_hours <= config('HOURS_RANGE'):
         return 'hour'
     return 'day'
+
+
+def seperate_metrics(data):
+    data = data.split('\n')
+    # Get rid of all empty lines
+    data = [line for line in data if line != ""]
+    data_tsfdb = []
+    data_rest = []
+    for line in data:
+        if parse_line(line)["tags"]["machine_id"] == "tsfdb":
+            data_tsfdb.append(line)
+        else:
+            data_rest.append(line)
+    return '\n'.join(data_tsfdb), '\n'.join(data_rest)
+
+
+def get_machine_id(data):
+    data = data.split('\n')
+    # Get rid of all empty lines
+    data = [line for line in data if line != ""]
+    return parse_line(data[0])["tags"]["machine_id"]
+
+
+def get_queue_id(data):
+    machine_id = get_machine_id(data)
+    if config('QUEUES') == -1:
+        return machine_id
+    return 'q' + str(hash(machine_id) % config('QUEUES'))

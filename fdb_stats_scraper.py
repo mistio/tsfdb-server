@@ -8,17 +8,24 @@ from tsfdb_server_v1.controllers.queue import Queue
 
 fdb.api_version(620)
 TSFDB_URI = os.getenv('TSFDB_URI', "http://tsfdb:8080")
+ORG_ID = os.getenv('ORG_ID', "")
 
 
 def generate_tsfdb_queues_metrics(db, timestamp):
-    line = "queue,machine_id=tsfdb "
-    available_queues_subspace = fdb.Subspace(('available_queues',))
-    count = 0
-    for count, (k, v) in enumerate(db[available_queues_subspace.range()], 1):
-        name = available_queues_subspace.unpack(k)[0]
-        line += "%s=%d," % (name, Queue(name).count_items(db))
-    line += "count=%d %s" % (count, timestamp)
-    return [line]
+    try:
+        line = "queue,machine_id=tsfdb "
+        available_queues_subspace = fdb.Subspace(('available_queues',))
+        count = 0
+        for count, (k, v) in enumerate(db[available_queues_subspace.range()],
+                                       1):
+            name = available_queues_subspace.unpack(k)[0]
+            line += "%s=%d," % (name, Queue(name).count_items(db))
+        line += "count=%d %s" % (count, timestamp)
+        return [line]
+    except fdb.FDBError as err:
+        print("ERROR: Could not get queues metrics: %s" %
+              str(err.description, 'utf-8'))
+        return []
 
 
 def generate_tsfdb_processes_metrics(status, timestamp):
@@ -60,21 +67,26 @@ def generate_tsfdb_qos_metrics(status, timestamp):
 
 
 def generate_tsfdb_operations_metrics(db, status, timestamp):
-    lines = []
-    metrics = 0
     try:
-        available_metrics = fdb.directory.open(
-            db, ('monitoring', 'available_metrics'))
-        for kv in db[available_metrics.range()]:
-            metrics += 1
-    except ValueError:
+        lines = []
         metrics = 0
-    operations = status["cluster"]["workload"]["operations"]
-    lines.append(("operations,machine_id=tsfdb reads=%f,writes=%f," +
-                  "metrics=%d %s") %
-                 (operations["reads"]["hz"], operations["writes"]["hz"],
-                  metrics, timestamp))
-    return lines
+        try:
+            available_metrics = fdb.directory.open(
+                db, ('monitoring', ORG_ID, 'available_metrics'))
+            for kv in db[available_metrics.range()]:
+                metrics += 1
+        except ValueError:
+            metrics = 0
+        operations = status["cluster"]["workload"]["operations"]
+        lines.append(("operations,machine_id=tsfdb reads=%f,writes=%f," +
+                      "metrics=%d %s") %
+                     (operations["reads"]["hz"], operations["writes"]["hz"],
+                      metrics, timestamp))
+        return lines
+    except fdb.FDBError as err:
+        print("ERROR: Could not get available metrics: %s" %
+              str(err.description, 'utf-8'))
+        return []
 
 
 def generate_tsfdb_cluster_data_metrics(status, timestamp):
@@ -101,10 +113,18 @@ def generate_tsfdb_cluster_data_metrics(status, timestamp):
 
 def main():
     db = fdb.open()
+    db.options.set_transaction_timeout(10000)
     while True:
         lines = []
         dt = datetime.now()
-        status = json.loads(db[b'\xff\xff/status/json'])
+        status = {}
+        try:
+            status = json.loads(db[b'\xff\xff/status/json'])
+        except fdb.FDBError as err:
+            print("ERROR: Could not get fdb metrics: %s" %
+                  str(err.description, 'utf-8'))
+            sleep(5)
+            continue
         timestamp = str(int(dt.timestamp())) + 9 * '0'
 
         lines += generate_tsfdb_operations_metrics(db, status, timestamp)

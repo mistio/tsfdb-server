@@ -8,6 +8,7 @@ mist_url = "http://dogfood2-mist-api"
 tsfdb_url = "http://localhost:8080"
 token = "token"
 default_resource_name = "tsfdb-stress-test"
+org = ""
 
 machine_data = {
     "cloud": "359f5325870f4fa4bee7e8de4ef3e4da",
@@ -97,7 +98,8 @@ class TsfdbClient(object):
             resource, metric)
         dt_before = datetime.now()
         data = requests.get(
-            "%s/v1/datapoints?query=%s" % (self.url, query))
+            "%s/v1/datapoints?query=%s" % (self.url, query),
+            headers={'x-org-id': org})
         dt_after = datetime.now()
         time_per_request[resource] = dt_after - dt_before
         if data.ok:
@@ -171,10 +173,11 @@ def delete_resources(id_of_first_machine, num_of_machines, mist):
 
 def create_resources(id_of_first_machine, num_of_machines, mist):
     print("Creating %d machines" % num_of_machines)
-    for i in range(id_of_first_machine,
-                   id_of_first_machine + num_of_machines):
-        machine_data["name"] = "%s%d" % (default_resource_name, i)
-        mist.create_machine(machine_data)
+    machine_data["name"] = "%s%d" % (
+        default_resource_name, id_of_first_machine)
+    machine_data["async"] = True
+    machine_data["quantity"] = num_of_machines
+    mist.create_machine(machine_data)
 
 
 def check_resources(mist, tsfdb):

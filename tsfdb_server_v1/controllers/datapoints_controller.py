@@ -8,8 +8,8 @@ from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noq
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
 from .query_funcs import fetch, deriv, roundX, roundY, topk, mean
-from .db import write_in_kv, write_in_queue, seperate_metrics
-from .helpers import config, log2slack
+from .db import write_in_kv, write_in_queue
+from .helpers import config, log2slack, seperate_metrics
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +66,9 @@ def write_datapoints(x_org_id, body):  # noqa: E501
     body = str(body, 'utf8')
     if config('WRITE_IN_QUEUE'):
         body_tsfdb, body_rest = seperate_metrics(body)
-        write_in_kv(x_org_id, body_tsfdb)
-        write_in_queue(x_org_id, body_rest)
+        if body_tsfdb:
+            write_in_kv(x_org_id, body_tsfdb)
+        if body_rest:
+            write_in_queue(x_org_id, body_rest)
     else:
         write_in_kv(x_org_id, body)

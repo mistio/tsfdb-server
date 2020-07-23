@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chart.fullname" . }}-tsfdb
+  labels:
+    app: tsfdb
+    chart: {{ include "chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: tsfdb
+        release: {{ .Release.Name }}
+    spec:
+{{- if .Values.image.secrets }}
+      imagePullSecrets:
+{{ toYaml .Values.image.secrets | indent 8 }}
+{{- end }}
+      containers:
+      - name: tsfdb
+        command:
+        - uwsgi
+        args:
+        - --plugins=python3
+        - --http=0.0.0.0:8080
+        - --wsgi-file=tsfdb_server_v1/__main__.py
+        - --callable=application
+        - --master
+        - --processes=32
+        - --harakiri=100
+        - --vacuum
+        - --buffer-size=65535
+        - --listen=1024
+        - --max-requests=50
+        env:
+        - name: API_URL
+          value: /api/v1/spec
+        image: {{ .Values.image.registry }}/tsfdb:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: fdb-config
+          mountPath: /etc/foundationdb/
+        resources:
+          limits:
+            memory: 1600Mi
+            cpu: 1
+          requests:
+            memory: 300Mi
+            cpu: 300m
+      tolerations:
+      - effect: PreferNoSchedule
+        key: dedicated
+        operator: Equal
+        value: fdb
+      volumes:
+      - name: fdb-config
+        configMap:
+          name: {{ include "chart.fullname" . }}-fdb-config
+          defaultMode: 420
+          items:
+          - key: cluster-file
+            path: fdb.cluster
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}

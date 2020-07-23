@@ -1,3 +1,4 @@
+import asyncio
 import fdb
 import fdb.tuple
 import logging
@@ -16,57 +17,23 @@ log = logging.getLogger(__name__)
 
 class TimeSeriesLayer():
     def __init__(self):
-        self.dir_monitoring = None
-        self.dir_orgs = {}
-        self.dir_resources = {}
-        self.dir_resources_resolutions = {}
-        self.dir_available_metrics = {}
         self.struct_types = (int, float)
+        self.limit = config('DATAPOINTS_PER_READ')
 
-    def __set_monitoring_dir(self, db):
-        if not self.dir_monitoring:
-            self.dir_monitoring = fdb.directory.create_or_open(
-                db, ('monitoring',))
-
-    def __get_org_dir(self, db, org):
-        self.__set_monitoring_dir(db)
-        if not self.dir_orgs.get(org):
-            self.dir_orgs[org] = self.dir_monitoring.create_or_open(
-                db, (org,))
-        return self.dir_orgs[org]
-
-    def __get_resource_dir(self, db, org, resource):
-        if not self.dir_resources.get(org, {}).get(resource):
-            if not self.dir_resources.get(org):
-                self.dir_resources[org] = {}
-            self.dir_resources[org][resource] = self.__get_org_dir(
-                db, org).create_or_open(db, (resource,))
-        return self.dir_resources[org][resource]
-
-    def __get_available_metrics_dir(self, db, org):
-        if not self.dir_available_metrics.get(org):
-            self.dir_available_metrics[org] = self.__get_org_dir(
-                db, org).create_or_open(db, ('available_metrics',))
-        return self.dir_available_metrics[org]
-
-    def __get_resource_resolution_dir(self, db, org, resource, resolution):
-        if not self.dir_resources_resolutions.get(org, {}).get(
-                resource, {}).get(resolution):
-            if not self.dir_resources_resolutions.get(org):
-                self.dir_resources_resolutions[org] = {}
-            if not self.dir_resources_resolutions[org].get(resource):
-                self.dir_resources_resolutions[org][resource] = {}
-            self.dir_resources_resolutions[org][resource][resolution] = \
-                self.__get_resource_dir(db, org, resource).create_or_open(
-                    db, (resolution,))
-        return self.dir_resources_resolutions[org][resource][resolution]
+    @fdb.transactional
+    def find_orgs(self, tr):
+        orgs = fdb.directory.create_or_open(
+            tr, ('monitoring')).list(tr)
+        return orgs
 
     @fdb.transactional
     def find_metrics(self, tr, org, resource):
         metrics = {}
-        for k, v in tr.get_range_startswith(self.__get_available_metrics_dir(
-                tr, org).pack((resource,))):
-            metric = self.__get_available_metrics_dir(tr, org).unpack(k)[1]
+        available_metrics = fdb.directory.create_or_open(
+            tr, ('monitoring', org, 'available_metrics'))
+        for k, v in tr.get_range_startswith(available_metrics.pack(
+                (resource,))):
+            metric = available_metrics.unpack(k)[1]
             value = fdb.tuple.unpack(v)[0]
             metrics.update(metric_to_dict(metric, value))
         return metrics
@@ -75,7 +42,8 @@ class TimeSeriesLayer():
     def find_resources(self, tr, org, regex_resources,
                        authorized_resources=None):
         filtered_resources = []
-        resources = set(self.__get_org_dir(tr, org).list(tr))
+        resources = set(fdb.directory.create_or_open(
+            tr, ('monitoring', org)).list(tr))
         # Remove reserved directory for metrics
         resources.remove('available_metrics')
         # Use only authorized resources
@@ -93,7 +61,8 @@ class TimeSeriesLayer():
         return filtered_resources
 
     def find_datapoints(self, db, org, resource,
-                        metric, start, stop):
+                        metric, start, stop, datapoints_dir=None,
+                        available_metrics=None):
 
         time_range = stop - start
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
@@ -102,23 +71,33 @@ class TimeSeriesLayer():
         if time_range_in_hours > config('SECONDS_RANGE'):
             stats = ("count", "sum")
 
+        resolution = time_range_to_resolution(time_range_in_hours)
+        if not available_metrics:
+            available_metrics = fdb.directory.create_or_open(
+                db, ('monitoring', org, 'available_metrics'))
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                db, ('monitoring', org, resource, resolution))
+
         for stat in stats:
             tuples = start_stop_key_tuples(
                 db, time_range_in_hours,
                 resource, metric, start,
-                stop, stat
+                stop, stat, self.limit
             )
-
-            key_timestamp_start, key_timestamp_stop = tuples
-
-            datapoints_per_stat[stat] = self.__find_datapoints_per_stat(
-                db, key_timestamp_start, key_timestamp_stop,
-                time_range_in_hours, org, resource, metric, stat)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            datapoints_per_stat[stat] = loop.run_until_complete(
+                self.__async_find_datapoints_per_stat(db, tuples,
+                                                      time_range_in_hours,
+                                                      org, resource, metric,
+                                                      stat, datapoints_dir,
+                                                      available_metrics))
 
             if isinstance(datapoints_per_stat[stat], Error):
                 return datapoints_per_stat[stat]
 
-        if time_range_in_hours > 1:
+        if time_range_in_hours > config('SECONDS_RANGE'):
             datapoints = div_datapoints(list(
                 datapoints_per_stat["sum"]),
                 list(datapoints_per_stat["count"]))
@@ -127,28 +106,70 @@ class TimeSeriesLayer():
 
         return {("%s.%s" % (resource, metric)): datapoints}
 
+    async def __async_find_datapoints_per_stat(self, db, tuples,
+                                               time_range_in_hours,
+                                               org, resource, metric, stat,
+                                               datapoints_dir=None,
+                                               available_metrics=None):
+        loop = asyncio.get_event_loop()
+        data_lists = [
+            loop.run_in_executor(None, self.__find_datapoints_per_stat, *
+                                 (db, start, stop, time_range_in_hours,
+                                  org, resource, metric, stat, datapoints_dir,
+                                  available_metrics))
+            for start, stop in zip(tuples, tuples[1:])
+        ]
+
+        data_lists = await asyncio.gather(*data_lists, return_exceptions=True)
+        combined_data_list = []
+        exceptions = 0
+        last_exception = None
+        for data_list in data_lists:
+            if isinstance(data_list, Error):
+                return data_list
+            if isinstance(data_list, Exception):
+                exceptions += 1
+                last_exception = data_list
+            else:
+                combined_data_list += data_list
+        if last_exception:
+            if not combined_data_list:
+                raise last_exception
+            error(
+                500, "Could not fetch %d/%d requests for resource," +
+                " metric: (%s, %s)"
+                % (exceptions, len(data_lists), resource, metric),
+                traceback=str(last_exception))
+        return combined_data_list
+
     @fdb.transactional
     def __find_datapoints_per_stat(self, tr, start, stop, time_range_in_hours,
-                                   org, resource, metric, stat):
+                                   org, resource, metric, stat,
+                                   datapoints_dir=None,
+                                   available_metrics=None):
 
-        if not tr[self.__get_available_metrics_dir(tr, org).pack(
+        if not available_metrics:
+            available_metrics = fdb.directory.create_or_open(
+                tr, ('monitoring', org, 'available_metrics'))
+        if not tr[available_metrics.pack(
                 (resource, metric))].present():
             error_msg = "Metric type: %s for resource: %s doesn't exist." % (
-                resource, metric)
+                metric, resource)
             return error(404, error_msg)
-        metric_type_tuple = tr[self.__get_available_metrics_dir(tr, org).
+        metric_type_tuple = tr[available_metrics.
                                pack((resource, metric))]
         metric_type = fdb.tuple.unpack(metric_type_tuple)[0]
 
         datapoints = []
         resolution = time_range_to_resolution(time_range_in_hours)
-        for k, v in tr[self.__get_resource_resolution_dir(
-                tr, org, resource, resolution).pack(start):
-                self.__get_resource_resolution_dir(tr, org, resource,
-                                                   resolution).pack(stop)]:
-
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
+        for k, v in tr.get_range(datapoints_dir.pack(start),
+                                 datapoints_dir.pack(stop),
+                                 streaming_mode=fdb.StreamingMode.want_all):
             tuple_key = list(fdb.tuple.unpack(k))
-            if time_range_in_hours <= 1:
+            if time_range_in_hours <= config('SECONDS_RANGE'):
                 tuple_value = list(fdb.tuple.unpack(v))
             else:
                 tuple_value = v
@@ -163,17 +184,17 @@ class TimeSeriesLayer():
 
     @fdb.transactional
     def write_datapoint(self, tr, org, resource, key, value,
-                        resolution='second'):
+                        resolution='second', datapoints_dir=None):
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
         if config('CHECK_DUPLICATES'):
-            if not tr[self.__get_resource_resolution_dir(
-                    tr, org, resource, resolution).pack(key)].present():
-                tr[self.__get_resource_resolution_dir(
-                    tr, org, resource, resolution).pack(key)] = fdb.tuple.pack(
-                        (value,))
+            if not tr[datapoints_dir.pack(key)].present():
+                tr[datapoints_dir.pack(key)] = fdb.tuple.pack(
+                    (value,))
                 return True
             saved_value = fdb.tuple.unpack(
-                tr[self.__get_resource_resolution_dir(
-                    tr, org, resource, resolution).pack(key)])[0]
+                tr[datapoints_dir.pack(key)])[0]
             if saved_value != value:
                 log.error("key: %s already exists with a different value" %
                           str(key))
@@ -182,14 +203,14 @@ class TimeSeriesLayer():
                     "key: %s already exists with the same value" % str(key))
             return False
 
-        tr[self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(key)] = fdb.tuple.pack(
-                (value,))
+        tr[datapoints_dir.pack(key)] = fdb.tuple.pack(
+            (value,))
         return True
 
     @fdb.transactional
     def write_datapoint_aggregated(self, tr, org, resource,
-                                   metric, dt, value, resolution):
+                                   metric, dt, value, resolution,
+                                   datapoints_dir=None):
         if type(value) not in self.struct_types:
             log.warning("Unsupported aggregation value type: %s" %
                         str(type(value)))
@@ -200,26 +221,58 @@ class TimeSeriesLayer():
         if not config('AGGREGATE_%s' % resolution.upper()):
             # log something
             return
-        tr.add(self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
+        tr.add(datapoints_dir.pack(
             time_aggregate_tuple(metric, "count", dt, resolution)),
             struct.pack('<q', 1))
-        tr.add(self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(
+        tr.add(datapoints_dir.pack(
             time_aggregate_tuple(metric, "sum", dt, resolution)),
             struct.pack('<q', value))
-        tr.min(self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(
+        tr.min(datapoints_dir.pack(
             time_aggregate_tuple(metric, "min", dt, resolution)),
             struct.pack('<q', value))
-        tr.max(self.__get_resource_resolution_dir(
-            tr, org, resource, resolution).pack(
+        tr.max(datapoints_dir.pack(
             time_aggregate_tuple(metric, "max", dt, resolution)),
             struct.pack('<q', value))
 
     @fdb.transactional
     def add_metric(self, tr, org, metric, metric_type):
-        if not tr[self.__get_available_metrics_dir(tr, org).pack(
+        available_metrics = fdb.directory.create_or_open(
+            tr, ('monitoring', org, 'available_metrics'))
+        if not tr[available_metrics.pack(
                 metric)].present():
-            tr[self.__get_available_metrics_dir(tr, org).pack(
+            tr[available_metrics.pack(
                 metric)] = fdb.tuple.pack((metric_type,))
+
+    @fdb.transactional
+    def delete_datapoints(self, tr, org, resource,
+                          metric, start, stop, resolution):
+
+        resolutions = {
+            "second": config('SECONDS_RANGE'),
+            "minute": config('MINUTES_RANGE'),
+            "hour": config('HOURS_RANGE'),
+            "day": config('HOURS_RANGE') + 1
+        }
+
+        time_range_in_hours = resolutions.get(
+            resolution, config('SECONDS_RANGE'))
+        stats = (None,)
+        if time_range_in_hours > config('SECONDS_RANGE'):
+            stats = ("count", "sum")
+
+        for stat in stats:
+            tuples = start_stop_key_tuples(
+                tr, time_range_in_hours,
+                resource, metric, start,
+                stop, stat
+            )
+
+            key_timestamp_start, key_timestamp_stop = tuples
+
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, ('monitoring', org, resource, resolution))
+            tr.clear_range(datapoints_dir.pack(key_timestamp_start),
+                           datapoints_dir.pack(key_timestamp_stop))

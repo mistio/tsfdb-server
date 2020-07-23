@@ -1,0 +1,15 @@
+# Settings for docker images used in the chart.
+image:
+  registry: mist
+  tag: master
+  pullPolicy: Always
+
+fdb:
+  fdbdoc: false
+  storageClass: ssd
+  deploy: true
+  storageEngine: ssd-2
+  redundancyMode: single
+  storageProcesses: 1
+  logProcesses: 1
+  statelessProcesses: -1
