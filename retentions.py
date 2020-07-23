@@ -55,7 +55,7 @@ def main():
 
             apply_retention_policy(db, retentions, config_orgs,
                                    config_resources, config_metrics)
-        sleep(10)
+        sleep(60)
 
 
 def apply_retention_policy(db, retentions, orgs, resources, metrics):
