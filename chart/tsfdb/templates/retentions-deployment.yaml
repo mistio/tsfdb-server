@@ -30,7 +30,7 @@ spec:
         - retentions.py
         env:
         - name: CONFIG
-          value: IltdIg==
+          value: WwogICAgewogICAgICAgICIqLCosKiI6IHsKICAgICAgICAgICAgInNlY29uZCI6ICIyNGgiLAogICAgICAgICAgICAibWludXRlIjogIjdkIiwKICAgICAgICAgICAgImhvdXIiOiAiMzBkIiwKICAgICAgICAgICAgImRheSI6ICIzNjVkIgogICAgICAgIH0KICAgIH0KXQo=
         image: {{ .Values.image.registry }}/tsfdb:{{ .Values.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         volumeMounts:
