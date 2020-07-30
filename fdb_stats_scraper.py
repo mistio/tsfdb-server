@@ -8,7 +8,7 @@ from tsfdb_server_v1.controllers.queue import Queue
 
 fdb.api_version(620)
 TSFDB_URI = os.getenv('TSFDB_URI', "http://tsfdb:8080")
-ORG_ID = os.getenv('ORG_ID', "")
+ACTIVE_METRIC_MINUTES = int(os.getenv('ACTIVE_METRIC_MINUTES', 60))
 
 
 def generate_tsfdb_queues_metrics(db, timestamp):
@@ -70,11 +70,20 @@ def generate_tsfdb_operations_metrics(db, status, timestamp):
     try:
         lines = []
         metrics = 0
+        orgs = fdb.directory.create_or_open(db, ('monitoring')).list(db)
         try:
-            available_metrics = fdb.directory.open(
-                db, ('monitoring', ORG_ID, 'available_metrics'))
-            for kv in db[available_metrics.range()]:
-                metrics += 1
+            for org in orgs:
+                available_metrics = fdb.directory.open(
+                    db, ('monitoring', org, 'available_metrics'))
+                for _, v in db[available_metrics.range()]:
+                    values = fdb.tuple.unpack(v)
+                    timestamp_metric = None
+                    if len(values) > 1:
+                        timestamp_metric = values[1]
+                    timestamp_now = datetime.timestamp(datetime.now())
+                    if not abs(timestamp_now - timestamp_metric) / 60 > \
+                            ACTIVE_METRIC_MINUTES:
+                        metrics += 1
         except ValueError:
             metrics = 0
         operations = status["cluster"]["workload"]["operations"]

@@ -44,7 +44,7 @@ def error(code, error_msg, traceback=None, request=None):
     return Error(code, error_msg)
 
 
-def metric_to_dict(metric, metric_type):
+def metric_to_dict(metric, metric_type, timestamp=None):
     return {
         metric: {
             "id": metric,
@@ -55,7 +55,8 @@ def metric_to_dict(metric, metric_type):
             "min_value": None,
             "priority": 0,
             "unit": "",
-            "type": metric_type
+            "type": metric_type,
+            "last_updated": timestamp
         }
     }
 
@@ -196,7 +197,8 @@ def config(name):
         'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440)),
         'QUEUES': int(os.getenv('QUEUES', -1)),
         'STATS_LOG_RATE': int(os.getenv('STATS_LOG_RATE', -1)),
-        'DATAPOINTS_PER_READ': int(os.getenv('DATAPOINTS_PER_READ', 200))
+        'DATAPOINTS_PER_READ': int(os.getenv('DATAPOINTS_PER_READ', 200)),
+        'ACTIVE_METRIC_MINUTES': int(os.getenv('ACTIVE_METRIC_MINUTES', 60))
     }
     return config_dict.get(name)
 

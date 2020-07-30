@@ -207,7 +207,12 @@ def update_metrics(tr, org, new_metrics):
     for machine, metrics in new_metrics.items():
         current_metrics = time_series.find_metrics(
             tr, org, machine)
-        current_metrics = {m for m in current_metrics.keys()}
+        timestamp_now = datetime.timestamp(datetime.now())
+        current_metrics = {
+            m for m in current_metrics.keys(
+            ) if not abs(timestamp_now - current_metrics.get(m, {}).get(
+                "last_updated", 0)) / 60 > config('ACTIVE_METRIC_MINUTES') / 2
+        }
         for metric, metric_type in metrics:
             if not (metric in current_metrics):
                 time_series.add_metric(tr, org,

@@ -9,6 +9,7 @@ from .helpers import metric_to_dict, error, config, div_datapoints, \
 from .tsfdb_tuple import tuple_to_datapoint, time_aggregate_tuple, \
     start_stop_key_tuples
 from tsfdb_server_v1.models.error import Error  # noqa: E501
+from datetime import datetime
 
 fdb.api_version(620)
 
@@ -34,8 +35,12 @@ class TimeSeriesLayer():
         for k, v in tr.get_range_startswith(available_metrics.pack(
                 (resource,))):
             metric = available_metrics.unpack(k)[1]
-            value = fdb.tuple.unpack(v)[0]
-            metrics.update(metric_to_dict(metric, value))
+            values = fdb.tuple.unpack(v)
+            metric_type = values[0]
+            timestamp = None
+            if len(values) > 1:
+                timestamp = values[1]
+            metrics.update(metric_to_dict(metric, metric_type, timestamp))
         return metrics
 
     @fdb.transactional
@@ -241,10 +246,21 @@ class TimeSeriesLayer():
     def add_metric(self, tr, org, metric, metric_type):
         available_metrics = fdb.directory.create_or_open(
             tr, ('monitoring', org, 'available_metrics'))
-        if not tr[available_metrics.pack(
-                metric)].present():
+        timestamp_now = datetime.timestamp(datetime.now())
+        values_list = tr[available_metrics.pack(metric)]
+        if not values_list:
             tr[available_metrics.pack(
-                metric)] = fdb.tuple.pack((metric_type,))
+                metric)] = fdb.tuple.pack((metric_type, timestamp_now))
+            return
+        if len(values_list) > 1:
+            _, timestamp_metric = values_list
+        else:
+            # In case there is not timestamp on the data
+            timestamp_metric = 0
+        if abs(timestamp_now - timestamp_metric) / 60 > \
+                config('ACTIVE_METRIC_MINUTES') / 2:
+            tr[available_metrics.pack(
+                metric)] = fdb.tuple.pack((metric_type, timestamp_now))
 
     @fdb.transactional
     def delete_datapoints(self, tr, org, resource,
