@@ -77,7 +77,7 @@ def generate_tsfdb_operations_metrics(db, status, timestamp):
                     db, ('monitoring', org, 'available_metrics'))
                 for _, v in db[available_metrics.range()]:
                     values = fdb.tuple.unpack(v)
-                    timestamp_metric = None
+                    timestamp_metric = 0
                     if len(values) > 1:
                         timestamp_metric = values[1]
                     timestamp_now = datetime.timestamp(datetime.now())

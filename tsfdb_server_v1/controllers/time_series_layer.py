@@ -37,7 +37,7 @@ class TimeSeriesLayer():
             metric = available_metrics.unpack(k)[1]
             values = fdb.tuple.unpack(v)
             metric_type = values[0]
-            timestamp = None
+            timestamp = 0
             if len(values) > 1:
                 timestamp = values[1]
             metrics.update(metric_to_dict(metric, metric_type, timestamp))
@@ -248,15 +248,14 @@ class TimeSeriesLayer():
             tr, ('monitoring', org, 'available_metrics'))
         timestamp_now = datetime.timestamp(datetime.now())
         values_list = tr[available_metrics.pack(metric)]
-        if not values_list:
+        if not values_list.present():
             tr[available_metrics.pack(
                 metric)] = fdb.tuple.pack((metric_type, timestamp_now))
             return
+        values_list = fdb.tuple.unpack(values_list)
+        timestamp_metric = 0
         if len(values_list) > 1:
             _, timestamp_metric = values_list
-        else:
-            # In case there is not timestamp on the data
-            timestamp_metric = 0
         if abs(timestamp_now - timestamp_metric) / 60 > \
                 config('ACTIVE_METRIC_MINUTES') / 2:
             tr[available_metrics.pack(

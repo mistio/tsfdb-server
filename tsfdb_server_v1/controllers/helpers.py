@@ -44,7 +44,7 @@ def error(code, error_msg, traceback=None, request=None):
     return Error(code, error_msg)
 
 
-def metric_to_dict(metric, metric_type, timestamp=None):
+def metric_to_dict(metric, metric_type, timestamp=0):
     return {
         metric: {
             "id": metric,
