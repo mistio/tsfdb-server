@@ -36,12 +36,12 @@ def key_tuple_day(dt, metric, stat=None):
 
 
 def start_stop_key_tuples(
-    db, time_range_in_hours, resource, metric, start, stop, stat=None,
+    db, resolution, resource, metric, start, stop, stat=None,
         limit=None):
-    time_boundaries = split_time_range(time_range_in_hours, start, stop, limit)
+    time_boundaries = split_time_range(resolution, start, stop, limit)
     # if time range is less than an hour, we create the keys for getting the
     # datapoints per second
-    if time_range_in_hours <= config('SECONDS_RANGE'):
+    if resolution == 'second':
         # delta compensates for the range function of foundationdb which
         # for start, stop returns keys in [start, stop). We convert it to
         # the range [start, stop]
@@ -50,12 +50,12 @@ def start_stop_key_tuples(
 
     # if time range is less than 2 days, we create the keys for getting the
     # summarized datapoints per minute
-    elif time_range_in_hours <= config('MINUTES_RANGE'):
+    elif resolution == 'minute':
         return [key_tuple_minute(time_boundary, metric, stat) for time_boundary
                 in time_boundaries]
     # if time range is less than 2 months, we create the keys for getting
     # the summarized datapoints per hour
-    elif time_range_in_hours <= config('HOURS_RANGE'):
+    elif resolution == 'hour':
         return [key_tuple_hour(time_boundary, metric, stat) for time_boundary
                 in time_boundaries]
     # if time range is more than 2 months, we create the keys for getting
@@ -64,12 +64,12 @@ def start_stop_key_tuples(
             in time_boundaries]
 
 
-def split_time_range(time_range_in_hours, start, stop, limit):
-    if time_range_in_hours <= config('SECONDS_RANGE'):
+def split_time_range(resolution, start, stop, limit):
+    if resolution == 'second':
         delta = timedelta(seconds=1)
-    elif time_range_in_hours <= config('MINUTES_RANGE'):
+    elif resolution == 'minute':
         delta = timedelta(minutes=1)
-    elif time_range_in_hours <= config('HOURS_RANGE'):
+    elif resolution == 'hour':
         delta = timedelta(hours=1)
     else:
         delta = timedelta(hours=24)
@@ -85,21 +85,21 @@ def split_time_range(time_range_in_hours, start, stop, limit):
     return time_ranges
 
 
-def tuple_to_timestamp(time_range_in_hours, tuple_key):
+def tuple_to_timestamp(resolution, tuple_key):
     # if time range is less than an hour, we create the timestamp per second
     # The last 6 items of the tuple contain the date up to the second
     # (year, month, day, hour, minute, second)
-    if time_range_in_hours <= config('SECONDS_RANGE'):
+    if resolution == 'second':
         return int(datetime(*tuple_key[-6:]).timestamp())
     # if time range is less than 2 days, we create the timestamp per minute
     # The last 5 items of the tuple contain the date up to the minute
     # (year, month, day, hour, minute)
-    if time_range_in_hours <= config('MINUTES_RANGE'):
+    elif resolution == 'minute':
         return int(datetime(*tuple_key[-5:]).timestamp())
     # if time range is less than 2 months, we create the timestamp per hour
     # The last 4 items of the tuple contain the date up to the hour
     # (year, month, day, hour)
-    if time_range_in_hours <= config('HOURS_RANGE'):
+    elif resolution == 'hour':
         return int(datetime(*tuple_key[-4:]).timestamp())
     # if time range is more than 2 months, we create the timestamp per day
     # The last 3 items of the tuple contain the date up to the day
@@ -107,12 +107,12 @@ def tuple_to_timestamp(time_range_in_hours, tuple_key):
     return int(datetime(*tuple_key[-3:]).timestamp())
 
 
-def tuple_to_datapoint(time_range_in_hours, tuple_value, tuple_key,
+def tuple_to_datapoint(resolution, tuple_value, tuple_key,
                        metric_type, stat):
-    timestamp = tuple_to_timestamp(time_range_in_hours, tuple_key)
+    timestamp = tuple_to_timestamp(resolution, tuple_key)
     # if the range is less than an hour, we create the appropriate
     # datapoint [value, timestamp]
-    if time_range_in_hours <= config('SECONDS_RANGE'):
+    if resolution == 'second':
         return [tuple_value[0], timestamp]
     # else we need to use the summarized values [sum, count, min, max]
     # and convert them to a datapoint [value, timestamp]

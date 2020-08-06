@@ -67,16 +67,16 @@ class TimeSeriesLayer():
 
     def find_datapoints(self, db, org, resource,
                         metric, start, stop, datapoints_dir=None,
-                        available_metrics=None):
-
-        time_range = stop - start
-        time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
+                        available_metrics=None, resolution=None):
         stats = (None,)
         datapoints_per_stat = {}
-        if time_range_in_hours > config('SECONDS_RANGE'):
+        if not resolution:
+            time_range = stop - start
+            time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
+            resolution = time_range_to_resolution(time_range_in_hours)
+        if resolution != 'second':
             stats = ("count", "sum")
 
-        resolution = time_range_to_resolution(time_range_in_hours)
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(
                 db, ('monitoring', org, 'available_metrics'))
@@ -86,7 +86,7 @@ class TimeSeriesLayer():
 
         for stat in stats:
             tuples = start_stop_key_tuples(
-                db, time_range_in_hours,
+                db, resolution,
                 resource, metric, start,
                 stop, stat, self.limit
             )
@@ -94,7 +94,7 @@ class TimeSeriesLayer():
             asyncio.set_event_loop(loop)
             datapoints_per_stat[stat] = loop.run_until_complete(
                 self.__async_find_datapoints_per_stat(db, tuples,
-                                                      time_range_in_hours,
+                                                      resolution,
                                                       org, resource, metric,
                                                       stat, datapoints_dir,
                                                       available_metrics))
@@ -102,7 +102,7 @@ class TimeSeriesLayer():
             if isinstance(datapoints_per_stat[stat], Error):
                 return datapoints_per_stat[stat]
 
-        if time_range_in_hours > config('SECONDS_RANGE'):
+        if resolution != 'second':
             datapoints = div_datapoints(list(
                 datapoints_per_stat["sum"]),
                 list(datapoints_per_stat["count"]))
@@ -112,14 +112,14 @@ class TimeSeriesLayer():
         return {("%s.%s" % (resource, metric)): datapoints}
 
     async def __async_find_datapoints_per_stat(self, db, tuples,
-                                               time_range_in_hours,
+                                               resolution,
                                                org, resource, metric, stat,
                                                datapoints_dir=None,
                                                available_metrics=None):
         loop = asyncio.get_event_loop()
         data_lists = [
             loop.run_in_executor(None, self.__find_datapoints_per_stat, *
-                                 (db, start, stop, time_range_in_hours,
+                                 (db, start, stop, resolution,
                                   org, resource, metric, stat, datapoints_dir,
                                   available_metrics))
             for start, stop in zip(tuples, tuples[1:])
@@ -148,7 +148,7 @@ class TimeSeriesLayer():
         return combined_data_list
 
     @fdb.transactional
-    def __find_datapoints_per_stat(self, tr, start, stop, time_range_in_hours,
+    def __find_datapoints_per_stat(self, tr, start, stop, resolution,
                                    org, resource, metric, stat,
                                    datapoints_dir=None,
                                    available_metrics=None):
@@ -166,7 +166,6 @@ class TimeSeriesLayer():
         metric_type = fdb.tuple.unpack(metric_type_tuple)[0]
 
         datapoints = []
-        resolution = time_range_to_resolution(time_range_in_hours)
         if not datapoints_dir:
             datapoints_dir = fdb.directory.create_or_open(
                 tr, ('monitoring', org, resource, resolution))
@@ -174,14 +173,14 @@ class TimeSeriesLayer():
                                  datapoints_dir.pack(stop),
                                  streaming_mode=fdb.StreamingMode.want_all):
             tuple_key = list(fdb.tuple.unpack(k))
-            if time_range_in_hours <= config('SECONDS_RANGE'):
+            if resolution == 'second':
                 tuple_value = list(fdb.tuple.unpack(v))
             else:
                 tuple_value = v
 
             datapoints.append(
                 tuple_to_datapoint(
-                    time_range_in_hours, tuple_value, tuple_key, metric_type,
+                    resolution, tuple_value, tuple_key, metric_type,
                     stat
                 )
             )
@@ -272,15 +271,13 @@ class TimeSeriesLayer():
             "day": config('HOURS_RANGE') + 1
         }
 
-        time_range_in_hours = resolutions.get(
-            resolution, config('SECONDS_RANGE'))
         stats = (None,)
-        if time_range_in_hours > config('SECONDS_RANGE'):
+        if resolution != 'second':
             stats = ("count", "sum")
 
         for stat in stats:
             tuples = start_stop_key_tuples(
-                tr, time_range_in_hours,
+                tr, resolution,
                 resource, metric, start,
                 stop, stat
             )
