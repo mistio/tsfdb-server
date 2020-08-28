@@ -263,14 +263,6 @@ class TimeSeriesLayer():
     @fdb.transactional
     def delete_datapoints(self, tr, org, resource,
                           metric, start, stop, resolution):
-
-        resolutions = {
-            "second": config('SECONDS_RANGE'),
-            "minute": config('MINUTES_RANGE'),
-            "hour": config('HOURS_RANGE'),
-            "day": config('HOURS_RANGE') + 1
-        }
-
         stats = (None,)
         if resolution != 'second':
             stats = ("count", "sum")

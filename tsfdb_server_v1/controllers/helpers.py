@@ -213,6 +213,15 @@ def time_range_to_resolution(time_range_in_hours):
     return 'day'
 
 
+def get_fallback_resolution(resolution):
+    fallback_resolutions = {
+        'second': 'minute',
+        'minute': 'hour',
+        'hour': 'day'
+    }
+    return fallback_resolutions.get(resolution)
+
+
 def seperate_metrics(data):
     data = data.split('\n')
     # Get rid of all empty lines
