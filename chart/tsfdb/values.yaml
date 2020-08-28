@@ -1,7 +1,7 @@
 # Settings for docker images used in the chart.
 image:
   registry: mist
-  tag: add-active-metrics
+  tag: fallback-resolution
   pullPolicy: Always
 
 fdb:
