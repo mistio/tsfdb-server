@@ -73,7 +73,7 @@ def split_time_range(resolution, start, stop, limit):
         delta = timedelta(hours=1)
     else:
         delta = timedelta(hours=24)
-    if not limit:
+    if not limit or start == stop:
         return [start, stop + delta]
     time_ranges = []
     time_boundary = start
