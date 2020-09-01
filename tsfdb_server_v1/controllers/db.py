@@ -316,6 +316,7 @@ def fetch_item(org, resources_and_metrics, start="", stop="",
 
     data = loop.run_until_complete(
         async_fetch_item(org, resources, start, stop, metrics))
+    loop.close()
     return data
 
 
@@ -369,6 +370,7 @@ def find_datapoints_per_resource(org, resource, start, stop, metrics):
     asyncio.set_event_loop(loop)
     current_data = loop.run_until_complete(
         async_find_datapoints(org, resource, start, stop, metrics))
+    loop.close()
     if isinstance(current_data, Error):
         return current_data
     data.update(current_data)

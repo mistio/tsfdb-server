@@ -98,6 +98,7 @@ class TimeSeriesLayer():
                                                       org, resource, metric,
                                                       stat, datapoints_dir,
                                                       available_metrics))
+            loop.close()
 
             if isinstance(datapoints_per_stat[stat], Error):
                 return datapoints_per_stat[stat]
