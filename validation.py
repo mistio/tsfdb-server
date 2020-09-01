@@ -197,7 +197,7 @@ def check_resources(mist, tsfdb, minutes=None):
     print("Number of monitored resources: %s" %
           len(monitored_resources))
     dt = datetime.now()
-    data = tsfdb.get_datapoints_from_resources(monitored_resources)
+    data = tsfdb.get_datapoints_from_resources(monitored_resources, minutes)
     check_missing_datapoints(data)
     check_inorder_datapoints(data)
     if not minutes:
