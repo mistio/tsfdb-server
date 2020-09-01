@@ -7,7 +7,7 @@ import traceback
 from .tsfdb_tuple import key_tuple_second
 from .helpers import error, parse_start_stop_params, \
     generate_metric, profile, is_regex, config, get_queue_id, \
-    time_range_to_resolution, get_fallback_resolution
+    time_range_to_resolution, get_fallback_resolution, filter_artifacts
 from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -148,7 +148,8 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
                 if metric_data_fallback.get(key):
                     if data.get(key):
                         data[key] = \
-                            metric_data_fallback.get(key) + \
+                            filter_artifacts(start, stop,
+                                             metric_data_fallback.get(key)) + \
                             data[key]
                     else:
                         data[key] = metric_data_fallback.get(key)

@@ -248,3 +248,8 @@ def get_queue_id(data):
     if config('QUEUES') == -1:
         return machine_id
     return 'q' + str(hash(machine_id) % config('QUEUES'))
+
+
+def filter_artifacts(start, stop, datapoints):
+    return [[val, dt] for val, dt in datapoints
+            if start <= datetime.fromtimestamp(dt) <= stop]
