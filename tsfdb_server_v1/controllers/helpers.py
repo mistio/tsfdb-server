@@ -172,6 +172,29 @@ def profile(func):
     return wrap
 
 
+def print_trace(func):
+    import asyncio
+    if asyncio.iscoroutinefunction(func):
+        async def wrap(*args, **kwargs):
+            import traceback
+            import sys
+            try:
+                return await func(*args, **kwargs)
+            except:
+                traceback.print_exc(file=sys.stdout)
+                raise
+    else:
+        def wrap(*args, **kwargs):
+            import traceback
+            import sys
+            try:
+                return func(*args, **kwargs)
+            except:
+                traceback.print_exc(file=sys.stdout)
+                raise
+    return wrap
+
+
 def config(name):
     config_dict = {
         'AGGREGATE_MINUTE': (os.getenv('AGGREGATE_MINUTE', 'True') == 'True'),

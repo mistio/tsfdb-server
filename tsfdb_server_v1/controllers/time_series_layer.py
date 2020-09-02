@@ -5,7 +5,7 @@ import logging
 import re
 import struct
 from .helpers import metric_to_dict, error, config, div_datapoints, \
-    time_range_to_resolution, config
+    time_range_to_resolution, config, print_trace
 from .tsfdb_tuple import tuple_to_datapoint, time_aggregate_tuple, \
     start_stop_key_tuples
 from tsfdb_server_v1.models.error import Error  # noqa: E501
@@ -65,6 +65,7 @@ class TimeSeriesLayer():
                     filtered_resources.append(resource)
         return filtered_resources
 
+    @print_trace
     def find_datapoints(self, db, org, resource,
                         metric, start, stop, datapoints_dir=None,
                         available_metrics=None, resolution=None):
@@ -112,6 +113,7 @@ class TimeSeriesLayer():
 
         return {("%s.%s" % (resource, metric)): datapoints}
 
+    @print_trace
     async def __async_find_datapoints_per_stat(self, db, tuples,
                                                resolution,
                                                org, resource, metric, stat,
@@ -148,6 +150,7 @@ class TimeSeriesLayer():
                 traceback=str(last_exception))
         return combined_data_list
 
+    @print_trace
     @fdb.transactional
     def __find_datapoints_per_stat(self, tr, start, stop, resolution,
                                    org, resource, metric, stat,
