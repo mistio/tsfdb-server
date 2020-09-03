@@ -7,7 +7,7 @@ import struct
 from .helpers import metric_to_dict, error, config, div_datapoints, \
     time_range_to_resolution, config, print_trace
 from .tsfdb_tuple import tuple_to_datapoint, time_aggregate_tuple, \
-    start_stop_key_tuples, round_start
+    start_stop_key_tuples, round_start, round_stop
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from datetime import datetime
 
@@ -70,7 +70,6 @@ class TimeSeriesLayer():
                         metric, start, stop, datapoints_dir=None,
                         available_metrics=None, resolution=None):
         stats = (None,)
-        start = round_start(start, resolution)
         datapoints_per_stat = {}
         if not resolution:
             time_range = stop - start
@@ -78,6 +77,8 @@ class TimeSeriesLayer():
             resolution = time_range_to_resolution(time_range_in_hours)
         if resolution != 'second':
             stats = ("count", "sum")
+        start = round_start(start, resolution)
+        stop = round_stop(stop, resolution)
 
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(

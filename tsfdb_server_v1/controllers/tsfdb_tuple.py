@@ -133,11 +133,26 @@ def time_aggregate_tuple(metric, stat, dt, resolution):
 def round_start(start, resolution):
     if resolution == 'minute':
         if start.second > 0:
-            start.replace(second=0, minute=start.minute+1)
+            start += timedelta(minutes=1)
+        start.replace(second=0)
     elif resolution == 'hour':
-        if start.minute > 0:
-            start.replace(second=0, minute=0, hour=start.hour+1)
+        if start.minute > 0 or start.second > 0:
+            start += timedelta(hour=1)
+        start.replace(second=0, minute=0)
     elif resolution == 'day':
-        if start.hour > 0:
-            start.replace(second=0, minute=0, hour=0, day=start.day+1)
+        if start.hour > 0 or start.minute > 0 or start.second > 0:
+            start += timedelta(hours=24)
+        start.replace(second=0, minute=0,
+                      hour=0)
     return start
+
+
+def round_stop(stop, resolution):
+    if resolution == 'minute':
+        stop = stop.replace(second=0)
+    elif resolution == 'hour':
+        stop = stop.replace(second=0, minute=0)
+    elif resolution == 'day':
+        stop = stop.replace(second=0, minute=0,
+                            hour=0)
+    return stop
