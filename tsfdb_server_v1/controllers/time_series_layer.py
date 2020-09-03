@@ -80,6 +80,9 @@ class TimeSeriesLayer():
         start = round_start(start, resolution)
         stop = round_stop(stop, resolution)
 
+        if start > stop:
+            return {("%s.%s" % (resource, metric)): []}
+
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(
                 db, ('monitoring', org, 'available_metrics'))

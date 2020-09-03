@@ -134,16 +134,16 @@ def round_start(start, resolution):
     if resolution == 'minute':
         if start.second > 0:
             start += timedelta(minutes=1)
-        start.replace(second=0)
+        start = start.replace(second=0)
     elif resolution == 'hour':
         if start.minute > 0 or start.second > 0:
             start += timedelta(hour=1)
-        start.replace(second=0, minute=0)
+        start = start.replace(second=0, minute=0)
     elif resolution == 'day':
         if start.hour > 0 or start.minute > 0 or start.second > 0:
             start += timedelta(hours=24)
-        start.replace(second=0, minute=0,
-                      hour=0)
+        start = start.replace(second=0, minute=0,
+                              hour=0)
     return start
 
 
