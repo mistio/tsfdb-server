@@ -144,8 +144,13 @@ def div_datapoints(datapoints1, datapoints2):
     datapoints2_dict = {t2: d2 for (d2, t2) in datapoints2}
     datapoints = []
     for _, t1 in datapoints1:
-        if datapoints1_dict.get(t1) and datapoints2_dict.get(t1):
-            datapoints.append([datapoints1_dict[t1]/datapoints2_dict[t1], t1])
+        if (datapoints1_dict.get(t1) is not None
+                and datapoints2_dict.get(t1) is not None):
+            if datapoints2_dict[t1] == 0:
+                datapoints.append([0, t1])
+            else:
+                datapoints.append(
+                    [datapoints1_dict[t1]/datapoints2_dict[t1], t1])
     return datapoints
 
 
