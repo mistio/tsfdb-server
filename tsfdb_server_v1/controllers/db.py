@@ -75,8 +75,9 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
             db, ('monitoring', org, 'available_metrics'))
         datapoints_dir = fdb.directory.create_or_open(
             db, ('monitoring', org, resource, resolution))
-        datapoints_fallback_dir = fdb.directory.create_or_open(
-            db, ('monitoring', org, resource, fallback_resolution))
+        if fallback_resolution:
+            datapoints_fallback_dir = fdb.directory.create_or_open(
+                db, ('monitoring', org, resource, fallback_resolution))
 
         metrics_data = [
             loop.run_in_executor(None, time_series.find_datapoints,
@@ -100,59 +101,61 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
                 exceptions += 1
                 last_exception = metric_data
             elif metric_data:
-                stop_fallback = stop
-                key = next(iter(metric_data))
-                if metric_data.get(key):
-                    first_timestamp = metric_data.get(
-                        key)[0][1]
-                    stop_fallback = datetime.fromtimestamp(first_timestamp)
+                if fallback_resolution:
+                    stop_fallback = stop
+                    key = next(iter(metric_data))
+                    if metric_data.get(key):
+                        first_timestamp = metric_data.get(
+                            key)[0][1]
+                        stop_fallback = datetime.fromtimestamp(first_timestamp)
+                    async_func_call = (None, time_series.find_datapoints,
+                                       *(db, org, resource,
+                                         key.split(".", 1)[1],
+                                         start, stop_fallback,
+                                         datapoints_fallback_dir,
+                                         available_metrics,
+                                         fallback_resolution))
+                    metrics_data_fallback.append(async_func_call)
+                    metric = next(iter(metric_data)).split(".", 1)[1]
+                    metrics_served.append(metric)
+                data.update(metric_data)
+
+        if fallback_resolution:
+            metrics_not_served = set(metrics) - set(metrics_served)
+
+            for metric in metrics_not_served:
                 async_func_call = (None, time_series.find_datapoints,
                                    *(db, org, resource,
-                                     key.split(".", 1)[1],
-                                       start, stop_fallback,
-                                       datapoints_fallback_dir,
-                                       available_metrics,
-                                       fallback_resolution))
+                                     metric,
+                                     start, stop,
+                                     datapoints_fallback_dir,
+                                     available_metrics,
+                                     fallback_resolution))
                 metrics_data_fallback.append(async_func_call)
-                data.update(metric_data)
-                metric = next(iter(metric_data)).split(".", 1)[1]
-                metrics_served.append(metric)
 
-        metrics_not_served = set(metrics) - set(metrics_served)
+            metrics_data_fallback = await asyncio.gather(
+                *(loop.run_in_executor(*metric_data_fallback)
+                  for metric_data_fallback in metrics_data_fallback),
+                return_exceptions=True)
 
-        for metric in metrics_not_served:
-            async_func_call = (None, time_series.find_datapoints,
-                               *(db, org, resource,
-                                 metric,
-                                 start, stop,
-                                 datapoints_fallback_dir,
-                                 available_metrics,
-                                 fallback_resolution))
-            metrics_data_fallback.append(async_func_call)
-
-        metrics_data_fallback = await asyncio.gather(
-            *(loop.run_in_executor(*metric_data_fallback)
-              for metric_data_fallback in metrics_data_fallback),
-            return_exceptions=True)
-
-        for metric_data_fallback in metrics_data_fallback:
-            if isinstance(metric_data_fallback, Error):
-                last_error = metric_data_fallback
-                print(last_error)
-            elif isinstance(metric_data_fallback, Exception):
-                exceptions += 1
-                last_exception = metric_data_fallback
-                print(last_exception)
-            elif metric_data_fallback:
-                key = next(iter(metric_data_fallback))
-                if metric_data_fallback.get(key):
-                    if data.get(key):
-                        data[key] = \
-                            filter_artifacts(start, stop,
-                                             metric_data_fallback.get(key)) + \
-                            data[key]
-                    else:
-                        data[key] = metric_data_fallback.get(key)
+            for metric_data_fallback in metrics_data_fallback:
+                if isinstance(metric_data_fallback, Error):
+                    last_error = metric_data_fallback
+                    print(last_error)
+                elif isinstance(metric_data_fallback, Exception):
+                    exceptions += 1
+                    last_exception = metric_data_fallback
+                    print(last_exception)
+                elif metric_data_fallback:
+                    key = next(iter(metric_data_fallback))
+                    if metric_data_fallback.get(key):
+                        if data.get(key):
+                            data[key] = \
+                                filter_artifacts(start, stop,
+                                                 metric_data_fallback.get(key)) + \
+                                data[key]
+                        else:
+                            data[key] = metric_data_fallback.get(key)
 
         if last_error:
             if not data:
