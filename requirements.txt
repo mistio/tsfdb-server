@@ -16,3 +16,4 @@ ipdb >= 0.12.2
 numpy >= 1.17.4
 RestrictedPython >= 5.0
 line-protocol-parser >= 1.0.1
+prometheus-client >= 0.8.0
