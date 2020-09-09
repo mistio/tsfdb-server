@@ -98,7 +98,7 @@ class InternalMetrics:
                         timestamp_now = datetime.timestamp(datetime.now())
                         if not (abs(timestamp_now - timestamp_metric) / 60 >
                                 ACTIVE_METRIC_MINUTES):
-                            metrics += 1
+                            active_metrics += 1
             except ValueError:
                 active_metrics = 0
             operations = self.status["cluster"]["workload"]["operations"]
