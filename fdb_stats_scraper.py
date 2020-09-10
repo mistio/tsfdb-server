@@ -69,28 +69,31 @@ def generate_tsfdb_qos_metrics(status, timestamp):
 def generate_tsfdb_operations_metrics(db, status, timestamp):
     try:
         lines = []
-        metrics = 0
+        active_metrics = 0
+        active_resources = set()
         orgs = fdb.directory.create_or_open(db, ('monitoring')).list(db)
         try:
             for org in orgs:
                 available_metrics = fdb.directory.open(
                     db, ('monitoring', org, 'available_metrics'))
-                for _, v in db[available_metrics.range()]:
+                for k, v in db[available_metrics.range()]:
                     values = fdb.tuple.unpack(v)
+                    resource_id, _ = available_metrics.unpack(k)
                     timestamp_metric = 0
                     if len(values) > 1:
                         timestamp_metric = values[1]
                     timestamp_now = datetime.timestamp(datetime.now())
                     if not abs(timestamp_now - timestamp_metric) / 60 > \
                             ACTIVE_METRIC_MINUTES:
-                        metrics += 1
+                        active_metrics += 1
+                        active_resources.add((org, resource_id))
         except ValueError:
-            metrics = 0
+            active_metrics = 0
         operations = status["cluster"]["workload"]["operations"]
         lines.append(("operations,machine_id=tsfdb reads=%f,writes=%f," +
-                      "metrics=%d %s") %
+                      "metrics=%d,resources=%d %s") %
                      (operations["reads"]["hz"], operations["writes"]["hz"],
-                      metrics, timestamp))
+                      active_metrics, len(active_resources), timestamp))
         return lines
     except fdb.FDBError as err:
         print("ERROR: Could not get available metrics: %s" %
