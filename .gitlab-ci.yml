@@ -69,9 +69,12 @@ build_tsfdb_image:
     - builder
   dependencies: []
 
+
+#################### RELEASE STAGE ####################
+
 helm_chart_release:
   stage: release
-  image: vpapav/helm-automation
+  image: mist/helm-automation
 
   script:
     - |
@@ -152,6 +155,10 @@ helm_chart_release:
         }
 
         main
-  when: on_success
+  when: manual
   only:
-    - tags
+    # only for references that match a version string (v1.2.3)
+    - /^v\d+\.\d+\.\d+$/
+  except:
+    # Except branches, meaning it'll only apply to git tags
+    - branches
