@@ -102,6 +102,11 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
                 last_exception = metric_data
             elif metric_data:
                 if fallback_resolution:
+                    # In case we have data from the appropriate resolution,
+                    # according to our config, we try to fill the gaps if any,
+                    # from the start of the asked time range till the oldest
+                    # datapoint e.g. [start, oldest datapoint, stop] ->
+                    # [start, oldest datapoint]
                     stop_fallback = stop
                     key = next(iter(metric_data))
                     if metric_data.get(key):
@@ -124,6 +129,9 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
             metrics_not_served = set(metrics) - set(metrics_served)
 
             for metric in metrics_not_served:
+                # In case we have metrics that didn't have any datapoints,
+                # from the appropriate resolution, we try to get the asked
+                # time range in a lower resolution instead.
                 async_func_call = (None, time_series.find_datapoints,
                                    *(db, org, resource,
                                      metric,
