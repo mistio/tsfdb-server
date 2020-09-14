@@ -178,8 +178,9 @@ paths:
               schema:
                 type: string
           description: Expected response to a valid request
-        # Commented out the error response because otherwise it wont
-        # return the correct text/plain headers
+        # Commented out the error response because otherwise it will
+        # return a json response instead of a text/plain one (for the 200 response).
+        # Works correctly as is even in the case of error responses.
         #default:
         #  content:
         #    application/json:
