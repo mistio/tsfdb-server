@@ -44,7 +44,7 @@ def error(code, error_msg, traceback=None, request=None):
     return Error(code, error_msg)
 
 
-def metric_to_dict(metric, metric_type):
+def metric_to_dict(metric, metric_type, timestamp=0):
     return {
         metric: {
             "id": metric,
@@ -55,7 +55,8 @@ def metric_to_dict(metric, metric_type):
             "min_value": None,
             "priority": 0,
             "unit": "",
-            "type": metric_type
+            "type": metric_type,
+            "last_updated": timestamp
         }
     }
 
@@ -143,8 +144,13 @@ def div_datapoints(datapoints1, datapoints2):
     datapoints2_dict = {t2: d2 for (d2, t2) in datapoints2}
     datapoints = []
     for _, t1 in datapoints1:
-        if datapoints1_dict.get(t1) and datapoints2_dict.get(t1):
-            datapoints.append([datapoints1_dict[t1]/datapoints2_dict[t1], t1])
+        if (datapoints1_dict.get(t1) is not None
+                and datapoints2_dict.get(t1) is not None):
+            if datapoints2_dict[t1] == 0:
+                datapoints.append([0, t1])
+            else:
+                datapoints.append(
+                    [datapoints1_dict[t1]/datapoints2_dict[t1], t1])
     return datapoints
 
 
@@ -168,6 +174,29 @@ def profile(func):
                     from tsfdb_server_v1.controllers.db import write_in_kv
                     write_in_kv("tsfdb", line + "\n")
 
+    return wrap
+
+
+def print_trace(func):
+    import asyncio
+    if asyncio.iscoroutinefunction(func):
+        async def wrap(*args, **kwargs):
+            import traceback
+            import sys
+            try:
+                return await func(*args, **kwargs)
+            except:
+                traceback.print_exc(file=sys.stdout)
+                raise
+    else:
+        def wrap(*args, **kwargs):
+            import traceback
+            import sys
+            try:
+                return func(*args, **kwargs)
+            except:
+                traceback.print_exc(file=sys.stdout)
+                raise
     return wrap
 
 
@@ -196,7 +225,8 @@ def config(name):
         'HOURS_RANGE': int(os.getenv('HOURS_RANGE', 1440)),
         'QUEUES': int(os.getenv('QUEUES', -1)),
         'STATS_LOG_RATE': int(os.getenv('STATS_LOG_RATE', -1)),
-        'DATAPOINTS_PER_READ': int(os.getenv('DATAPOINTS_PER_READ', 200))
+        'DATAPOINTS_PER_READ': int(os.getenv('DATAPOINTS_PER_READ', 200)),
+        'ACTIVE_METRIC_MINUTES': int(os.getenv('ACTIVE_METRIC_MINUTES', 60))
     }
     return config_dict.get(name)
 
@@ -209,6 +239,15 @@ def time_range_to_resolution(time_range_in_hours):
     elif time_range_in_hours <= config('HOURS_RANGE'):
         return 'hour'
     return 'day'
+
+
+def get_fallback_resolution(resolution):
+    fallback_resolutions = {
+        'second': 'minute',
+        'minute': 'hour',
+        'hour': 'day'
+    }
+    return fallback_resolutions.get(resolution)
 
 
 def seperate_metrics(data):
@@ -237,3 +276,8 @@ def get_queue_id(data):
     if config('QUEUES') == -1:
         return machine_id
     return 'q' + str(hash(machine_id) % config('QUEUES'))
+
+
+def filter_artifacts(start, stop, datapoints):
+    return [[val, dt] for val, dt in datapoints
+            if start <= datetime.fromtimestamp(dt) <= stop]

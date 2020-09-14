@@ -10,6 +10,7 @@ from tsfdb_server_v1.controllers.helpers import parse_start_stop_params
 
 fdb.api_version(620)
 time_series = TimeSeriesLayer()
+time_series.limit = None
 db = fdb.open()
 
 
@@ -29,10 +30,11 @@ def main():
         for org in all_orgs:
             resources = time_series.find_resources(db, org, "*")
             all_resources[org] = resources
+            all_metrics[org] = {}
             for resource in resources:
                 metrics = time_series.find_metrics(
                     db, org, resource)
-                all_metrics[resource] = set(metrics)
+                all_metrics[org][resource] = set(metrics)
 
         for config in configs:
             regex = next(iter(config))
@@ -48,10 +50,12 @@ def main():
             for org in config_orgs:
                 config_resources[org] = filter_items(
                     regex_resource, all_resources[org])
+                config_metrics[org] = {}
                 for resource in config_resources[org]:
-                    config_metrics[resource] = filter_items(
-                        regex_metric, all_metrics[resource])
-                    all_metrics[resource] -= set(config_metrics[resource])
+                    config_metrics[org][resource] = filter_items(
+                        regex_metric, all_metrics[org][resource])
+                    all_metrics[org][resource] -= set(
+                        config_metrics[org][resource])
 
             apply_retention_policy(db, retentions, config_orgs,
                                    config_resources, config_metrics)
@@ -65,7 +69,7 @@ def apply_retention_policy(db, retentions, orgs, resources, metrics):
         start = datetime.min
         for org in orgs:
             for resource in resources[org]:
-                for metric in metrics[resource]:
+                for metric in metrics[org][resource]:
                     time_series.delete_datapoints(
                         db, org, resource, metric, start, stop, resolution)
 

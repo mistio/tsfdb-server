@@ -65,12 +65,12 @@ class TsfdbClient(object):
     def __init__(self, url):
         self.url = url
 
-    def get_datapoints_from_resources(self, resources):
+    def get_datapoints_from_resources(self, resources, minutes=None):
         time_per_request = {}
         print("Getting datapoints from %d resources" % len(resources))
         loop = asyncio.get_event_loop()
         data = loop.run_until_complete(
-            self._get_datapoints(resources, time_per_request))
+            self._get_datapoints(resources, time_per_request, minutes))
         if None in data:
             print("Failed to get datapoints from %d resources" %
                   len([True for d in data if not d]))
@@ -82,24 +82,34 @@ class TsfdbClient(object):
                 data_dict.update(d)
         return data_dict
 
-    async def _get_datapoints(self, resources, time_per_request):
+    async def _get_datapoints(self, resources, time_per_request, minutes=None):
         loop = asyncio.get_event_loop()
         data = [
             loop.run_in_executor(None, self.get_datapoints_from_resource, *
-                                 (resource, time_per_request))
+                                 (resource, time_per_request, minutes))
             for resource in resources
         ]
 
         return await asyncio.gather(*data)
 
-    def get_datapoints_from_resource(self, resource, time_per_request):
+    def get_datapoints_from_resource(self, resource, time_per_request,
+                                     minutes=None):
         metric = "system.load1"
-        query = 'fetch("%s.%s", start="", stop="", step="")' % (
-            resource, metric)
+        if minutes:
+            query = 'fetch("%s.%s", start="-%dm", stop="", step="")' % (
+                resource, metric, minutes)
+        else:
+            query = 'fetch("%s.%s", start="", stop="", step="")' % (
+                resource, metric)
         dt_before = datetime.now()
-        data = requests.get(
-            "%s/v1/datapoints?query=%s" % (self.url, query),
-            headers={'x-org-id': org})
+        data = None
+        try:
+            data = requests.get(
+                "%s/v1/datapoints?query=%s" % (self.url, query),
+                headers={'x-org-id': org})
+        except requests.exceptions.ConnectionError:
+            print(f"Could not fetch datapoints for resource: {resource}")
+            return None
         dt_after = datetime.now()
         time_per_request[resource] = dt_after - dt_before
         if data.ok:
@@ -180,63 +190,72 @@ def create_resources(id_of_first_machine, num_of_machines, mist):
     mist.create_machine(machine_data)
 
 
-def check_resources(mist, tsfdb):
+def check_resources(mist, tsfdb, minutes=None):
     print("Checking monitored machines")
     monitored_resources = list(mist.get_monitored_resources().keys())
     assert monitored_resources
     print("Number of monitored resources: %s" %
           len(monitored_resources))
     dt = datetime.now()
-    data = tsfdb.get_datapoints_from_resources(monitored_resources)
+    data = tsfdb.get_datapoints_from_resources(monitored_resources, minutes)
     check_missing_datapoints(data)
     check_inorder_datapoints(data)
-    check_late_datapoints(data, datetime.timestamp(dt))
+    if not minutes:
+        check_late_datapoints(data, datetime.timestamp(dt))
 
 
 def options():
-    print('For checking machines:')
-    print('\tvalidation.py')
+    print('For monitoring stats:')
+    print('\tvalidation.py -s [-r <range_in_minutes>]')
     print('For creating machines:')
-    print('\tvalidation.py -m <num_of_machines> -i <id_of_first_machine>')
+    print('\tvalidation.py -m <num_of_machines> [-i <id_of_first_machine>]')
     print('For deleting machines:')
-    print('\tvalidation.py -m <num_of_machines> -i <id_of_first_machine> -d')
+    print('\tvalidation.py -m <num_of_machines> [-i <id_of_first_machine>] -d')
 
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "m:i:dh")
+        opts, args = getopt.getopt(argv, "m:i:dhsr:")
     except getopt.GetoptError:
         options()
         sys.exit(2)
 
     num_of_machines = 0
     id_of_first_machine = 0
+    create = False
     delete = False
-    stats = True
-
-    if opts:
-        stats = False
+    stats = False
+    minutes = None
 
     for opt, arg in opts:
         if opt == '-m':
             num_of_machines = int(arg)
+            if not delete:
+                create = True
         elif opt == "-i":
             id_of_first_machine = int(arg)
         elif opt == "-d":
             delete = True
+            create = False
         elif opt == "-h":
             options()
             return
+        elif opt == "-s":
+            stats = True
+        elif opt == "-r":
+            minutes = int(arg)
 
     mist = MistClient(mist_url, token)
     tsfdb = TsfdbClient(tsfdb_url)
 
     if stats:
-        check_resources(mist, tsfdb)
+        check_resources(mist, tsfdb, minutes)
     elif delete:
         delete_resources(id_of_first_machine, num_of_machines, mist)
-    else:
+    elif create:
         create_resources(id_of_first_machine, num_of_machines, mist)
+    else:
+        options()
 
 
 if __name__ == "__main__":
