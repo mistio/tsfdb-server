@@ -7,7 +7,7 @@ import traceback
 from .tsfdb_tuple import key_tuple_second
 from .helpers import error, parse_start_stop_params, \
     generate_metric, profile, is_regex, config, get_queue_id, \
-    time_range_to_resolution
+    time_range_to_resolution, get_fallback_resolution, filter_artifacts
 from .queue import Queue
 from line_protocol_parser import parse_line
 from datetime import datetime
@@ -70,15 +70,20 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
         time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
         resolution = time_range_to_resolution(time_range_in_hours)
+        fallback_resolution = get_fallback_resolution(resolution)
         available_metrics = fdb.directory.create_or_open(
             db, ('monitoring', org, 'available_metrics'))
         datapoints_dir = fdb.directory.create_or_open(
             db, ('monitoring', org, resource, resolution))
+        if fallback_resolution:
+            datapoints_fallback_dir = fdb.directory.create_or_open(
+                db, ('monitoring', org, resource, fallback_resolution))
 
         metrics_data = [
             loop.run_in_executor(None, time_series.find_datapoints,
                                  *(db, org, resource, metric, start, stop,
-                                   datapoints_dir, available_metrics))
+                                   datapoints_dir, available_metrics,
+                                   resolution))
             for metric in metrics
         ]
 
@@ -87,6 +92,8 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
         exceptions = 0
         last_exception = None
         last_error = None
+        metrics_data_fallback = []
+        metrics_served = []
         for metric_data in metrics_data:
             if isinstance(metric_data, Error):
                 last_error = metric_data
@@ -94,7 +101,70 @@ async def async_find_datapoints(org, resource, start, stop, metrics):
                 exceptions += 1
                 last_exception = metric_data
             elif metric_data:
+                if fallback_resolution:
+                    # In case we have data from the appropriate resolution,
+                    # according to our config, we try to fill the gaps if any,
+                    # from the start of the asked time range till the oldest
+                    # datapoint e.g. [start, oldest datapoint, stop] ->
+                    # [start, oldest datapoint]
+                    stop_fallback = stop
+                    key = next(iter(metric_data))
+                    if metric_data.get(key):
+                        first_timestamp = metric_data.get(
+                            key)[0][1]
+                        stop_fallback = datetime.fromtimestamp(first_timestamp)
+                    async_func_call = (None, time_series.find_datapoints,
+                                       *(db, org, resource,
+                                         key.split(".", 1)[1],
+                                         start, stop_fallback,
+                                         datapoints_fallback_dir,
+                                         available_metrics,
+                                         fallback_resolution))
+                    metrics_data_fallback.append(async_func_call)
+                    metric = next(iter(metric_data)).split(".", 1)[1]
+                    metrics_served.append(metric)
                 data.update(metric_data)
+
+        if fallback_resolution:
+            metrics_not_served = set(metrics) - set(metrics_served)
+
+            for metric in metrics_not_served:
+                # In case we have metrics that didn't have any datapoints,
+                # from the appropriate resolution, we try to get the asked
+                # time range in a lower resolution instead.
+                async_func_call = (None, time_series.find_datapoints,
+                                   *(db, org, resource,
+                                     metric,
+                                     start, stop,
+                                     datapoints_fallback_dir,
+                                     available_metrics,
+                                     fallback_resolution))
+                metrics_data_fallback.append(async_func_call)
+
+            metrics_data_fallback = await asyncio.gather(
+                *(loop.run_in_executor(*metric_data_fallback)
+                  for metric_data_fallback in metrics_data_fallback),
+                return_exceptions=True)
+
+            for metric_data_fallback in metrics_data_fallback:
+                if isinstance(metric_data_fallback, Error):
+                    last_error = metric_data_fallback
+                    print(last_error)
+                elif isinstance(metric_data_fallback, Exception):
+                    exceptions += 1
+                    last_exception = metric_data_fallback
+                    print(last_exception)
+                elif metric_data_fallback:
+                    key = next(iter(metric_data_fallback))
+                    if metric_data_fallback.get(key):
+                        if data.get(key):
+                            data[key] = \
+                                filter_artifacts(start, stop,
+                                                 metric_data_fallback.get(key)) + \
+                                data[key]
+                        else:
+                            data[key] = metric_data_fallback.get(key)
+
         if last_error:
             if not data:
                 return last_error
@@ -207,7 +277,12 @@ def update_metrics(tr, org, new_metrics):
     for machine, metrics in new_metrics.items():
         current_metrics = time_series.find_metrics(
             tr, org, machine)
-        current_metrics = {m for m in current_metrics.keys()}
+        timestamp_now = datetime.timestamp(datetime.now())
+        current_metrics = {
+            m for m in current_metrics.keys(
+            ) if not abs(timestamp_now - current_metrics.get(m, {}).get(
+                "last_updated", 0)) / 60 > config('ACTIVE_METRIC_MINUTES') / 2
+        }
         for metric, metric_type in metrics:
             if not (metric in current_metrics):
                 time_series.add_metric(tr, org,
@@ -253,6 +328,7 @@ def fetch_item(org, resources_and_metrics, start="", stop="",
 
     data = loop.run_until_complete(
         async_fetch_item(org, resources, start, stop, metrics))
+    loop.close()
     return data
 
 
@@ -306,6 +382,7 @@ def find_datapoints_per_resource(org, resource, start, stop, metrics):
     asyncio.set_event_loop(loop)
     current_data = loop.run_until_complete(
         async_find_datapoints(org, resource, start, stop, metrics))
+    loop.close()
     if isinstance(current_data, Error):
         return current_data
     data.update(current_data)
