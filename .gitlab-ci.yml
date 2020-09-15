@@ -69,6 +69,20 @@ build_tsfdb_image:
     - builder
   dependencies: []
 
+  update_chart_tsfdb_image_tags:
+    stage: build
+    script:
+      - mkdir -p artifacts
+      - export IMG_TAG=$CI_COMMIT_SHA
+      - echo $IMG_TAG
+      - echo "IMG_TAG=$IMG_TAG"
+      - envsubst < chart/tsfdb/values.yaml > artifacts/values.yaml
+      - cp artifacts/values.yaml chart/tsfdb/values.yaml
+    artifacts:
+      paths:
+        - chart/tsfdb/values.yaml
+    dependencies: []
+
 
 #################### RELEASE STAGE ####################
 
@@ -162,3 +176,5 @@ helm_chart_release:
   except:
     # Except branches, meaning it'll only apply to git tags
     - branches
+  dependencies:
+    - update_chart_tsfdb_image_tags
