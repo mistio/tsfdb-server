@@ -71,6 +71,9 @@ build_tsfdb_image:
 
 update_chart_tsfdb_image_tags:
   stage: build
+  image: docker/compose:alpine-1.25.4
+  before_script:
+    - apk add --no-cache gettext
   script:
     - mkdir -p artifacts
     - export IMG_TAG=$CI_COMMIT_SHA
