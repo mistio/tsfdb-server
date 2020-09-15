@@ -13,3 +13,6 @@ fdb:
   storageProcesses: 1
   logProcesses: 1
   statelessProcesses: -1
+  knobRelocationParallelismPerSourceServer: 6
+  knobFetchKeysParallelismBytes: 10e6
+  knobMaxOutstanding: 256

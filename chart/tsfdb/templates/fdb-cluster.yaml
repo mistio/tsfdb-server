@@ -53,6 +53,10 @@ spec:
               securityContext:
                 runAsUser: 0
     storage:
+      customParameters:
+        - knob_relocation_parallelism_per_source_server={{ .Values.fdb.knobRelocationParallelismPerSourceServer }}
+        - knob_fetch_keys_parallelism_bytes={{ .Values.fdb.knobFetchKeysParallelismBytes }}
+        - knob_max_outstanding={{ .Values.fdb.knobMaxOutstanding }}
       volumeClaim:
         spec:
           storageClassName: {{ .Values.fdb.storageClass }}
