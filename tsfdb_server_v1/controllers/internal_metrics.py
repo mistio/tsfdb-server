@@ -84,14 +84,16 @@ class InternalMetrics:
         try:
             metrics = {}
             active_metrics = 0
+            active_resources = set()
             orgs = fdb.directory.create_or_open(
                 self.db, ('monitoring')).list(self.db)
             try:
                 for org in orgs:
                     available_metrics = fdb.directory.open(
                         self.db, ('monitoring', org, 'available_metrics'))
-                    for _, v in self.db[available_metrics.range()]:
+                    for k, v in self.db[available_metrics.range()]:
                         values = fdb.tuple.unpack(v)
+                        resource_id, _ = available_metrics.unpack(k)
                         timestamp_metric = 0
                         if len(values) > 1:
                             timestamp_metric = values[1]
@@ -99,6 +101,7 @@ class InternalMetrics:
                         if not (abs(timestamp_now - timestamp_metric) / 60 >
                                 ACTIVE_METRIC_MINUTES):
                             active_metrics += 1
+                            active_resources.add((org, resource_id))
             except ValueError:
                 active_metrics = 0
             operations = self.status["cluster"]["workload"]["operations"]
@@ -107,7 +110,8 @@ class InternalMetrics:
             metrics = {
                 f"{key_prefix}.reads": operations["reads"]["hz"],
                 f"{key_prefix}.writes": operations["writes"]["hz"],
-                f"{key_prefix}.metrics": active_metrics
+                f"{key_prefix}.metrics": active_metrics,
+                f"{key_prefix}.resources": len(active_resources)
             }
             return metrics
         except fdb.FDBError as err:
