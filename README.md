@@ -5,11 +5,13 @@ TSFDB is a Time Series Database built on top of FoundationDB.
 TSFDB uses the [Connexion](https://github.com/zalando/connexion) library on top of Flask.
 
 ## Architecture
-TSFDB employes several processes with different purposes
+TSFDB employs several processes with different purposes
 * tsfdb: uWSGI powered web app which reads and writes metrics from/to FoundationDB
 * tsfdb-consumer: Process which consumes queues written by tsfdb and transforms metrics from bulk data to a key-value format
 * tsfdb-retentions: Process which applies a retention policy in order to conserve storage (Optional)
 * tsfdb-scraper: Process which scrapes FoundationDB status data and stores it in the key-value layer (Optional)
+
+![Architecture.svg](Architecture.svg)
 
 ## Running with docker-compose
 #TODO
@@ -33,9 +35,9 @@ These instructions are based on the internal tsfbd metrics exposed as a promethe
 2) Least Operating Space Storage / Log\
  if the space storage is decreasing dramatically try to either:
    * Scale up the cluster (Storage or Log)
-   * Apply more aggresive retentions
+   * Apply more aggressive retentions
 3) Moving Data in Flight / Queue\
-Flight -> Actual data being transfered\
+Flight -> Actual data being transferred\
 Queue -> Data that is planed to move\
  if MDF or MDQ > 10% Total key-value space then it means that there is a lot of data transfer\
  Try to either:
@@ -60,9 +62,9 @@ if Total Queues == Resources or avg(Queue Size > 10) or non realtime metric data
         - knob_max_outstanding=256
         ```
 6) Storage Data lag / Worst lag between log and storage\
-   if lag > 1 min and increasing, then there is definetely a problem:
+   if lag > 1 min and increasing, then there is definitely a problem:
    Try the same as 5. Usually 5,6 happen together.
 
 ### Sources
-https://forums.foundationdb.org/t/how-to-detect-node-failure/1821/2
-https://forums.foundationdb.org/t/what-do-you-monitor/184/21
+* https://forums.foundationdb.org/t/how-to-detect-node-failure/1821/2
+* https://forums.foundationdb.org/t/what-do-you-monitor/184/21
