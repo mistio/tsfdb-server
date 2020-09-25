@@ -9,7 +9,7 @@ TSFDB employs several processes with different purposes
 * tsfdb: uWSGI powered web app which reads and writes metrics from/to FoundationDB
 * tsfdb-consumer: Process which consumes queues written by tsfdb and transforms metrics from bulk data to a key-value format
 * tsfdb-retentions: Process which applies a retention policy in order to conserve storage (Optional)
-* tsfdb-scraper: Process which scrapes FoundationDB status data and stores it in the key-value layer (Optional)
+* tsfdb-scraper: Process which scrapes FoundationDB status data and stores it in the Time Series layer (Optional)
 
 ![Architecture.svg](Architecture.svg)
 
