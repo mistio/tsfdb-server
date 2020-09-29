@@ -69,6 +69,21 @@ def write_datapoints(x_org_id, body):  # noqa: E501
         if body_tsfdb:
             write_in_kv(x_org_id, body_tsfdb)
         if body_rest:
+            from line_protocol_parser import parse_line
+            from .helpers import generate_metric
+            from datetime import datetime
+            # Create a list of lines
+            data = body_rest.split('\n')
+            # Get rid of all empty lines
+            data = [line for line in data if line != ""]
+            for line in data:
+                dict_line = parse_line(line)
+                machine = dict_line["tags"]["machine_id"]
+                dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
+                metric = generate_metric(
+                    dict_line["tags"], dict_line["measurement"])
+                if metric == "system" and "load1" in dict_line["fields"].keys():
+                    print(f"machine_id = {machine}, metric = system.load1, dt = {dt}")
             write_in_queue(x_org_id, body_rest)
     else:
         write_in_kv(x_org_id, body)
