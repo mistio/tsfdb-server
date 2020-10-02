@@ -23,5 +23,7 @@ tsfdb_server_v1/models/resource.py
 tsfdb_server_v1/models/series_response.py
 tsfdb_server_v1/openapi/openapi.yaml
 tsfdb_server_v1/test/__init__.py
+tsfdb_server_v1/test/test_datapoints_controller.py
+tsfdb_server_v1/test/test_resources_controller.py
 tsfdb_server_v1/typing_utils.py
 tsfdb_server_v1/util.py
