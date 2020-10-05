@@ -14,7 +14,6 @@ RUN apt-get update && \
 WORKDIR /usr/src/app
 
 COPY requirements.txt /usr/src/app/
-COPY setup.py /usr/src/app/
 
 RUN pip3 install --no-cache-dir -r requirements.txt && \
     pip3 install uwsgi ipython && \
