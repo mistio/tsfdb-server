@@ -12,6 +12,7 @@ tsfdb_server_v1/__init__.py
 tsfdb_server_v1/__main__.py
 tsfdb_server_v1/controllers/__init__.py
 tsfdb_server_v1/controllers/datapoints_controller.py
+tsfdb_server_v1/controllers/internal_metrics_controller.py
 tsfdb_server_v1/controllers/resources_controller.py
 tsfdb_server_v1/controllers/security_controller_.py
 tsfdb_server_v1/encoder.py
@@ -24,6 +25,7 @@ tsfdb_server_v1/models/series_response.py
 tsfdb_server_v1/openapi/openapi.yaml
 tsfdb_server_v1/test/__init__.py
 tsfdb_server_v1/test/test_datapoints_controller.py
+tsfdb_server_v1/test/test_internal_metrics_controller.py
 tsfdb_server_v1/test/test_resources_controller.py
 tsfdb_server_v1/typing_utils.py
 tsfdb_server_v1/util.py

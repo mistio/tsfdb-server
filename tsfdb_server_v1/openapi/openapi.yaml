@@ -1,4 +1,4 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
   license:
     name: MIT
@@ -86,6 +86,20 @@ paths:
       tags:
       - datapoints
       x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
+  /internal_metrics:
+    get:
+      operationId: list_internal_metrics
+      responses:
+        "200":
+          content:
+            text/plain:
+              schema:
+                type: string
+          description: Expected response to a valid request
+      summary: Return internal metrics and metadata for a specific resource
+      tags:
+      - internal_metrics
+      x-openapi-router-controller: tsfdb_server_v1.controllers.internal_metrics_controller
   /resources:
     get:
       operationId: list_resources
@@ -179,6 +193,7 @@ components:
   schemas:
     DatapointsResponse:
       example:
+        query: query
         series:
         - datapoints:
           - - 1.43031207E12
@@ -190,17 +205,16 @@ components:
             - 0.8008281904610115
           - - 1.4303121E12
             - 0.8008281904610115
-        query: query
         status: status
       properties:
-        status:
-          type: string
         query:
           type: string
         series:
           items:
             $ref: '#/components/schemas/SeriesResponse'
           type: array
+        status:
+          type: string
       type: object
     Error:
       properties:

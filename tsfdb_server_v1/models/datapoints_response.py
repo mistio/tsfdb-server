@@ -17,31 +17,31 @@ class DatapointsResponse(Model):
     Do not edit the class manually.
     """
 
-    def __init__(self, status=None, query=None, series=None):  # noqa: E501
+    def __init__(self, query=None, series=None, status=None):  # noqa: E501
         """DatapointsResponse - a model defined in OpenAPI
 
-        :param status: The status of this DatapointsResponse.  # noqa: E501
-        :type status: str
         :param query: The query of this DatapointsResponse.  # noqa: E501
         :type query: str
         :param series: The series of this DatapointsResponse.  # noqa: E501
         :type series: List[SeriesResponse]
+        :param status: The status of this DatapointsResponse.  # noqa: E501
+        :type status: str
         """
         self.openapi_types = {
-            'status': str,
             'query': str,
-            'series': List[SeriesResponse]
+            'series': List[SeriesResponse],
+            'status': str
         }
 
         self.attribute_map = {
-            'status': 'status',
             'query': 'query',
-            'series': 'series'
+            'series': 'series',
+            'status': 'status'
         }
 
-        self._status = status
         self._query = query
         self._series = series
+        self._status = status
 
     @classmethod
     def from_dict(cls, dikt) -> 'DatapointsResponse':
@@ -53,27 +53,6 @@ class DatapointsResponse(Model):
         :rtype: DatapointsResponse
         """
         return util.deserialize_model(dikt, cls)
-
-    @property
-    def status(self):
-        """Gets the status of this DatapointsResponse.
-
-
-        :return: The status of this DatapointsResponse.
-        :rtype: str
-        """
-        return self._status
-
-    @status.setter
-    def status(self, status):
-        """Sets the status of this DatapointsResponse.
-
-
-        :param status: The status of this DatapointsResponse.
-        :type status: str
-        """
-
-        self._status = status
 
     @property
     def query(self):
@@ -116,3 +95,24 @@ class DatapointsResponse(Model):
         """
 
         self._series = series
+
+    @property
+    def status(self):
+        """Gets the status of this DatapointsResponse.
+
+
+        :return: The status of this DatapointsResponse.
+        :rtype: str
+        """
+        return self._status
+
+    @status.setter
+    def status(self, status):
+        """Sets the status of this DatapointsResponse.
+
+
+        :param status: The status of this DatapointsResponse.
+        :type status: str
+        """
+
+        self._status = status
