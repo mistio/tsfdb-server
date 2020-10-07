@@ -39,6 +39,7 @@ The FoundationDB operator should be present on the cluster before installing tsf
    | triple      | 5+                |
 
 2) Number of Storage & Log Processes that have been tested successfully
+
    | Storage     | Log  | Metrics  |
    | :---------: | :--: | :------: |
    | 4           | 3    | 2.3K     |
