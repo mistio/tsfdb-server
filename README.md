@@ -29,6 +29,22 @@ helm install mist/tsfdb
 The FoundationDB operator should be present on the cluster before installing tsfdb.
 
 ## Operations Playbook
+### Before Deploying
+1) Redundancy levels
+
+   | Redundancy  | Storage Processes |
+   | :---------: | :---------------: |
+   | single      | 1-2               |
+   | double      | 3-4               |
+   | triple      | 5+                |
+
+2) Number of Storage & Log Processes that have been tested successfully
+   | Storage     | Log  | Metrics  |
+   | :---------: | :--: | :------: |
+   | 4           | 3    | 2.3K     |
+   | 8           | 4    | 10.4K    |
+
+### During Operation
 These instructions are based on the internal tsfbd metrics exposed as a prometheus endpoint.
 1) Degraded processes\
  #TODO
@@ -68,3 +84,4 @@ if Total Queues == Resources or avg(Queue Size > 10) or non realtime metric data
 ### Sources
 * https://forums.foundationdb.org/t/how-to-detect-node-failure/1821/2
 * https://forums.foundationdb.org/t/what-do-you-monitor/184/21
+* https://apple.github.io/foundationdb/configuration.html#single-datacenter-modes
