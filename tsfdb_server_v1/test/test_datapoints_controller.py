@@ -22,8 +22,8 @@ class TestDatapointsController(BaseTestCase):
         query_string = [('query', 'query_example')]
         headers = { 
             'Accept': 'application/json',
-            'x_org_id': 'x_org_id_example',
-            'x_allowed_resources': 'x_allowed_resources_example',
+            'x-org-id': 'x-org-id-example',
+            'x-allowed-resources': 'x-allowed-resources-example',
         }
         response = self.client.open(
             '/v1/datapoints',
@@ -43,7 +43,7 @@ class TestDatapointsController(BaseTestCase):
         headers = { 
             'Accept': 'application/json',
             'Content-Type': 'text/plain',
-            'x_org_id': 'x_org_id_example',
+            'x-org-id': 'x-org-id-example',
         }
         response = self.client.open(
             '/v1/datapoints',

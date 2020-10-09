@@ -21,7 +21,7 @@ class TestResourcesController(BaseTestCase):
         """
         headers = { 
             'Accept': 'application/json',
-            'x_org_id': 'x_org_id_example',
+            'x-org-id': 'x-org-id-example',
         }
         response = self.client.open(
             '/v1/resources/{resource_id}'.format(resource_id='resource_id_example'),
@@ -38,7 +38,7 @@ class TestResourcesController(BaseTestCase):
         query_string = [('limit', 56)]
         headers = { 
             'Accept': 'application/json',
-            'x_org_id': 'x_org_id_example',
+            'x-org-id': 'x-org-id-example',
         }
         response = self.client.open(
             '/v1/resources',

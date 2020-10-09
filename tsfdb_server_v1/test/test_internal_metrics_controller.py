@@ -9,8 +9,8 @@ from six import BytesIO
 from tsfdb_server_v1.test import BaseTestCase
 
 
-class TestInternalMetricsController(BaseTestCase):
-    """InternalMetricsController integration test stubs"""
+class TestInternalController(BaseTestCase):
+    """InternalController integration test stubs"""
 
     def test_list_internal_metrics(self):
         """Test case for list_internal_metrics
@@ -21,7 +21,7 @@ class TestInternalMetricsController(BaseTestCase):
             'Accept': 'text/plain',
         }
         response = self.client.open(
-            '/v1/internal_metrics',
+            '/v1/internal/metrics',
             method='GET',
             headers=headers)
         self.assert200(response,
