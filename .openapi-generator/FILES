@@ -12,6 +12,7 @@ tsfdb_server_v1/__init__.py
 tsfdb_server_v1/__main__.py
 tsfdb_server_v1/controllers/__init__.py
 tsfdb_server_v1/controllers/datapoints_controller.py
+tsfdb_server_v1/controllers/internal_controller.py
 tsfdb_server_v1/controllers/resources_controller.py
 tsfdb_server_v1/controllers/security_controller_.py
 tsfdb_server_v1/encoder.py

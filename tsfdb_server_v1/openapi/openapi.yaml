@@ -86,6 +86,20 @@ paths:
       tags:
       - datapoints
       x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
+  /internal/metrics:
+    get:
+      operationId: list_internal_metrics
+      responses:
+        "200":
+          content:
+            text/plain:
+              schema:
+                type: string
+          description: Expected response to a valid request
+      summary: Return internal metrics and metadata for a specific resource
+      tags:
+      - internal
+      x-openapi-router-controller: tsfdb_server_v1.controllers.internal_metrics_controller
   /resources:
     get:
       operationId: list_resources
@@ -168,29 +182,6 @@ paths:
       tags:
       - resources
       x-openapi-router-controller: tsfdb_server_v1.controllers.resources_controller
-  /internal_metrics:
-    get:
-      operationId: list_internal_metrics
-      responses:
-        "200":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Expected response to a valid request
-        # Commented out the error response because otherwise it will
-        # return a json response instead of a text/plain one (for the 200 response).
-        # Works correctly as is even in the case of error responses.
-        #default:
-        #  content:
-        #    application/json:
-        #      schema:
-        #        $ref: '#/components/schemas/Error'
-        #  description: unexpected error
-      summary: Return internal metrics and metadata for a specific resource
-      tags:
-      - internal_metrics
-      x-openapi-router-controller: tsfdb_server_v1.controllers.internal_metrics_controller
 components:
   callbacks: {}
   examples: {}
