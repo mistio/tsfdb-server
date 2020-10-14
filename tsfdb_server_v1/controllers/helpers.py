@@ -250,7 +250,7 @@ def get_fallback_resolution(resolution):
     return fallback_resolutions.get(resolution)
 
 
-def seperate_metrics(data):
+def separate_metrics(data):
     data = data.split('\n')
     # Get rid of all empty lines
     data = [line for line in data if line != ""]
