@@ -6,7 +6,7 @@ from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
 from .db import DBOperations
 from .query_funcs import deriv, roundX, roundY, topk, mean
-from .query_funcs import fetch_monitoring as fetch
+from .query_funcs import fetch_metering as fetch
 
 
 def fetch_metering_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
