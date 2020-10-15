@@ -4,6 +4,9 @@ import six
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
+from .db import DBOperations
+from .query_funcs import deriv, roundX, roundY, topk, mean
+from .query_funcs import fetch_monitoring as fetch
 
 
 def fetch_metering_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
@@ -20,7 +23,24 @@ def fetch_metering_datapoints(query, x_org_id, x_allowed_resources=None):  # noq
 
     :rtype: DatapointsResponse
     """
-    return 'do some magic!'
+    funcs = {"fetch": fetch, "deriv": deriv, "roundX": roundX,
+             "roundY": roundY, "topk": topk, "mean": mean}
+    allowed_params = {'__builtins__': safe_builtins}.update(funcs)
+    try:
+        byte_code = compile_restricted(
+            query,
+            filename='<inline code>',
+            mode='eval'
+        )
+        data = eval(byte_code, allowed_params)
+    except SyntaxError as e:
+        log.error("Error when parsing query: %s, error: %s", query, str(e))
+        return Error(400, "Bad request")
+
+    if isinstance(data, Error):
+        return data
+    else:
+        return DatapointsResponse(query=str(query), series=data)
 
 
 def write_metering_datapoints(x_org_id, body):  # noqa: E501
@@ -35,4 +55,6 @@ def write_metering_datapoints(x_org_id, body):  # noqa: E501
 
     :rtype: None
     """
-    return 'do some magic!'
+    db_ops = DBOperations(timeseries_type="metering")
+    body = str(body, 'utf8')
+    db_ops.write_in_kv(x_org_id, body)
