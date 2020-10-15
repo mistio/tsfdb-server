@@ -229,8 +229,7 @@ class DBOperations:
                         request=str(data))
 
 
-    @profile
-    def write_in_kv(self, org, data):
+    def write_in_kv_base(self, org, data):
         try:
             if not data:
                 return
@@ -264,6 +263,10 @@ class DBOperations:
                 parse_line(data[0])["tags"]["machine_id"]))
             return error(503, error_msg, traceback=traceback.format_exc(),
                         request=str(data))
+
+    @profile
+    def write_in_kv(self, org, data):
+        self.write_in_kv_base(org, data)
 
 
     @fdb.transactional

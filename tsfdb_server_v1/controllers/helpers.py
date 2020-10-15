@@ -128,7 +128,7 @@ def generate_metric(tags, measurement):
         # Ignore the value if it is empty
         if processed_value and processed_tag:
             metric += ("-%s" % processed_value)
-        # Accomodate for the possibility
+        # Accommodate for the possibility
         # that there is a value with an empty tag
         elif processed_value:
             metric += (".%s" % processed_value)
@@ -171,8 +171,9 @@ def profile(func):
                         "stats,machine_id=tsfdb,func=%s" +
                         " latency=%f %s") %
                         (func.__name__, dt, timestamp))
-                    from tsfdb_server_v1.controllers.db import write_in_kv
-                    write_in_kv("tsfdb", line + "\n")
+                    from tsfdb_server_v1.controllers.db import DBOperations
+                    db_ops = DBOperations()
+                    db_ops.write_in_kv_base("tsfdb", line + "\n")
 
     return wrap
 
