@@ -7,7 +7,8 @@ from RestrictedPython import safe_builtins
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
-from .query_funcs import fetch, deriv, roundX, roundY, topk, mean
+from .query_funcs import deriv, roundX, roundY, topk, mean
+from .query_funcs import fetch_monitoring as fetch
 from .db import DBOperations
 from .helpers import config, log2slack, separate_metrics
 
@@ -31,19 +32,17 @@ def fetch_datapoints(query, x_org_id, x_allowed_resources=None):  # noqa: E501
     funcs = {"fetch": fetch, "deriv": deriv, "roundX": roundX,
              "roundY": roundY, "topk": topk, "mean": mean}
     allowed_params = {'__builtins__': safe_builtins}.update(funcs)
+    data = None
     try:
         byte_code = compile_restricted(
             query,
             filename='<inline code>',
             mode='eval'
         )
-        data = exec(byte_code, allowed_params, None)
+        data = eval(byte_code, allowed_params)
     except SyntaxError as e:
         log.error("Error when parsing query: %s, error: %s", query, str(e))
         return Error(400, "Bad request")
-
-    code = compile(query, "query", "eval")
-    data = eval(code, allowed_params)
 
     if isinstance(data, Error):
         return data

@@ -49,11 +49,9 @@ def mean(data):
             data[metric].append([sum(values)/len(values), timestamp])
     return data
 
-
-def fetch(resources_and_metrics, start="", stop="", step=""):
+def fetch(db_ops, resources_and_metrics, start="", stop="", step=""):
     # We take for granted that all metrics start with the id and that
     # it ends on the first occurence of a dot, e.g id.system.load1
-    db_ops = DBOperations()
     start, stop = parse_start_stop_params(start, stop)
     if start > stop:
         return Error(code=400, message="Invalid time range")
@@ -79,6 +77,13 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
         return mean(roundY(data, base=parse_relative_time_to_seconds(step)))
     return data
 
+def fetch_monitoring(resources_and_metrics, start="", stop="", step=""):
+    db_ops = DBOperations()
+    return fetch(db_ops, resources_and_metrics, start, stop, step)
+
+def fetch_metering(resources_and_metrics, start="", stop="", step=""):
+    db_ops = DBOperations("metering")
+    return fetch(db_ops, resources_and_metrics, start, stop, step)
 
 def deriv(data):
     if not isinstance(data, dict) or not data:
