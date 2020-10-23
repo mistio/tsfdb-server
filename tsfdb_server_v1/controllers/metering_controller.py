@@ -1,6 +1,8 @@
 import connexion
 import six
 
+from RestrictedPython import compile_restricted
+from RestrictedPython import safe_builtins
 from tsfdb_server_v1.models.datapoints_response import DatapointsResponse  # noqa: E501
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1 import util
@@ -55,6 +57,6 @@ def write_metering_datapoints(x_org_id, body):  # noqa: E501
 
     :rtype: None
     """
-    db_ops = DBOperations(timeseries_type="metering")
+    db_ops = DBOperations(series_type="metering")
     body = str(body, 'utf8')
     db_ops.write_in_kv(x_org_id, body)

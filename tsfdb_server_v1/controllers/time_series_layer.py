@@ -17,22 +17,22 @@ log = logging.getLogger(__name__)
 
 
 class TimeSeriesLayer():
-    def __init__(self, type="monitoring"):
+    def __init__(self, series_type="monitoring"):
         self.struct_types = (int, float)
         self.limit = config('DATAPOINTS_PER_READ')
-        self.type = type
+        self.series_type = series_type
 
     @fdb.transactional
     def find_orgs(self, tr):
         orgs = fdb.directory.create_or_open(
-            tr, (self.type)).list(tr)
+            tr, (self.series_type)).list(tr)
         return orgs
 
     @fdb.transactional
     def find_metrics(self, tr, org, resource):
         metrics = {}
         available_metrics = fdb.directory.create_or_open(
-            tr, (self.type, org, 'available_metrics'))
+            tr, (self.series_type, org, 'available_metrics'))
         for k, v in tr.get_range_startswith(available_metrics.pack(
                 (resource,))):
             metric = available_metrics.unpack(k)[1]
@@ -49,7 +49,7 @@ class TimeSeriesLayer():
                        authorized_resources=None):
         filtered_resources = []
         resources = set(fdb.directory.create_or_open(
-            tr, (self.type, org)).list(tr))
+            tr, (self.series_type, org)).list(tr))
         # Remove reserved directory for metrics
         resources.remove('available_metrics')
         # Use only authorized resources
@@ -86,10 +86,10 @@ class TimeSeriesLayer():
 
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(
-                db, (self.type, org, 'available_metrics'))
+                db, (self.series_type, org, 'available_metrics'))
         if not datapoints_dir:
             datapoints_dir = fdb.directory.create_or_open(
-                db, (self.type, org, resource, resolution))
+                db, (self.series_type, org, resource, resolution))
 
         for stat in stats:
             tuples = start_stop_key_tuples(
@@ -165,7 +165,7 @@ class TimeSeriesLayer():
 
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(
-                tr, (self.type, org, 'available_metrics'))
+                tr, (self.series_type, org, 'available_metrics'))
         if not tr[available_metrics.pack(
                 (resource, metric))].present():
             error_msg = "Metric type: %s for resource: %s doesn't exist." % (
@@ -178,7 +178,7 @@ class TimeSeriesLayer():
         datapoints = []
         if not datapoints_dir:
             datapoints_dir = fdb.directory.create_or_open(
-                tr, (self.type, org, resource, resolution))
+                tr, (self.series_type, org, resource, resolution))
         for k, v in tr.get_range(datapoints_dir.pack(start),
                                  datapoints_dir.pack(stop),
                                  streaming_mode=fdb.StreamingMode.want_all):
@@ -201,7 +201,7 @@ class TimeSeriesLayer():
                         resolution='second', datapoints_dir=None):
         if not datapoints_dir:
             datapoints_dir = fdb.directory.create_or_open(
-                tr, (self.type, org, resource, resolution))
+                tr, (self.series_type, org, resource, resolution))
         if config('CHECK_DUPLICATES'):
             if not tr[datapoints_dir.pack(key)].present():
                 tr[datapoints_dir.pack(key)] = fdb.tuple.pack(
@@ -237,7 +237,7 @@ class TimeSeriesLayer():
             return
         if not datapoints_dir:
             datapoints_dir = fdb.directory.create_or_open(
-                tr, (self.type, org, resource, resolution))
+                tr, (self.series_type, org, resource, resolution))
         tr.add(datapoints_dir.pack(
             time_aggregate_tuple(metric, "count", dt, resolution)),
             struct.pack('<q', 1))
@@ -254,7 +254,7 @@ class TimeSeriesLayer():
     @fdb.transactional
     def add_metric(self, tr, org, metric, metric_type):
         available_metrics = fdb.directory.create_or_open(
-            tr, (self.type, org, 'available_metrics'))
+            tr, (self.series_type, org, 'available_metrics'))
         timestamp_now = datetime.timestamp(datetime.now())
         values_list = tr[available_metrics.pack(metric)]
         if not values_list.present():
@@ -287,6 +287,6 @@ class TimeSeriesLayer():
             key_timestamp_start, key_timestamp_stop = tuples
 
             datapoints_dir = fdb.directory.create_or_open(
-                tr, (self.type, org, resource, resolution))
+                tr, (self.series_type, org, resource, resolution))
             tr.clear_range(datapoints_dir.pack(key_timestamp_start),
                            datapoints_dir.pack(key_timestamp_stop))

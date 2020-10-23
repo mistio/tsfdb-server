@@ -17,11 +17,11 @@ from .time_series_layer import TimeSeriesLayer
 fdb.api_version(620)
 
 class DBOperations:
-    def __init__(self, timeseries_type="monitoring"):
+    def __init__(self, series_type="monitoring"):
         self.log = logging.getLogger(__name__)
         self.resolutions = ("minute", "hour", "day")
         self.db = self.open_db()
-        self.time_series = TimeSeriesLayer(timeseries_type)
+        self.time_series = TimeSeriesLayer(series_type)
 
     @staticmethod
     def open_db():
@@ -67,12 +67,12 @@ class DBOperations:
             resolution = time_range_to_resolution(time_range_in_hours)
             fallback_resolution = get_fallback_resolution(resolution)
             available_metrics = fdb.directory.create_or_open(
-                self.db, (self.time_series.type, org, 'available_metrics'))
+                self.db, (self.time_series.series_type, org, 'available_metrics'))
             datapoints_dir = fdb.directory.create_or_open(
-                self.db, (self.time_series.type, org, resource, resolution))
+                self.db, (self.time_series.series_type, org, resource, resolution))
             if fallback_resolution:
                 datapoints_fallback_dir = fdb.directory.create_or_open(
-                    self.db, (self.time_series.type, org, resource, fallback_resolution))
+                    self.db, (self.time_series.series_type, org, resource, fallback_resolution))
 
             metrics_data = [
                 loop.run_in_executor(None, self.time_series.find_datapoints,
@@ -190,11 +190,13 @@ class DBOperations:
             metric = generate_metric(
                 dict_line["tags"], dict_line["measurement"])
             dt = datetime.fromtimestamp(int(str(dict_line["time"])[:10]))
+            if self.time_series.series_type == 'metering':
+                dt = datetime.now()
             for field, value in dict_line["fields"].items():
                 machine_metric = "%s.%s" % (metric, field)
                 if not datapoints_dir.get("second"):
                     datapoints_dir["second"] = fdb.directory.create_or_open(
-                        tr, (self.time_series.type, org, machine, 'second'))
+                        tr, (self.time_series.series_type, org, machine, 'second'))
                 if self.time_series.write_datapoint(tr, org, machine, key_tuple_second(
                     dt, machine_metric), value,
                         datapoints_dir=datapoints_dir['second']):
@@ -205,7 +207,7 @@ class DBOperations:
                         if not datapoints_dir.get(resolution):
                             datapoints_dir[resolution] = \
                                 fdb.directory.create_or_open(
-                                tr, (self.time_series.type, org, machine, resolution))
+                                tr, (self.time_series.series_type, org, machine, resolution))
                         self.time_series.write_datapoint_aggregated(
                             tr, org, machine, machine_metric,
                             dt, value, resolution,
