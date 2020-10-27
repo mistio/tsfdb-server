@@ -87,8 +87,9 @@ def parse_start_stop_params(start, stop):
 
 def parse_time(dt):
     # Convert "y" to "years" since dateparser doesn't support it
-    # e.g. -2y => -2years
+    # e.g. -2y => -2years, same for day and days
     dt = re.sub("y$", "years", dt)
+    dt = re.sub("day$", "days", dt)
     if re.match(".*ms", dt):
         dt = dt.replace("ms", "")
         dt = "%ds" % int(float(dt) / 1000)
