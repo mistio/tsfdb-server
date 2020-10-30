@@ -4,7 +4,7 @@ import fdb.tuple
 import re
 import logging
 import traceback
-from .tsfdb_tuple import key_tuple_second
+from .tsfdb_tuple import key_tuple_second, delta_dt
 from .helpers import error, parse_start_stop_params, \
     generate_metric, profile, is_regex, config, get_queue_id, \
     time_range_to_resolution, get_fallback_resolution, filter_artifacts
@@ -16,6 +16,7 @@ from .time_series_layer import TimeSeriesLayer
 
 fdb.api_version(620)
 
+
 class DBOperations:
     def __init__(self, series_type="monitoring"):
         self.log = logging.getLogger(__name__)
@@ -26,7 +27,8 @@ class DBOperations:
     @staticmethod
     def open_db():
         db = fdb.open()
-        db.options.set_transaction_retry_limit(config('TRANSACTION_RETRY_LIMIT'))
+        db.options.set_transaction_retry_limit(
+            config('TRANSACTION_RETRY_LIMIT'))
         db.options.set_transaction_timeout(config('TRANSACTION_TIMEOUT'))
         return db
 
@@ -38,12 +40,12 @@ class DBOperations:
                 str(err.description, 'utf-8'),
                 resource))
             return error(503, error_msg, traceback=traceback.format_exc(),
-                        request=resource)
+                         request=resource)
 
     def find_resources(self, org, regex_resources, authorized_resources=None):
         try:
             return self.time_series.find_resources(self.db, org, regex_resources,
-                                            authorized_resources)
+                                                   authorized_resources)
         except fdb.FDBError as err:
             error_msg = (
                 "%s on find_resources(regex_resources) with regex_resources: %s"
@@ -51,8 +53,7 @@ class DBOperations:
                     str(err.description, 'utf-8'),
                     regex_resources))
             return error(503, error_msg, traceback=traceback.format_exc(),
-                        request=regex_resources)
-
+                         request=regex_resources)
 
     async def async_find_datapoints(self, org, resource, start, stop, metrics):
         metrics_data = []
@@ -76,9 +77,9 @@ class DBOperations:
 
             metrics_data = [
                 loop.run_in_executor(None, self.time_series.find_datapoints,
-                                    *(self.db, org, resource, metric, start, stop,
-                                    datapoints_dir, available_metrics,
-                                    resolution))
+                                     *(self.db, org, resource, metric, start, stop,
+                                       datapoints_dir, available_metrics,
+                                       resolution))
                 for metric in metrics
             ]
 
@@ -107,14 +108,16 @@ class DBOperations:
                         if metric_data.get(key):
                             first_timestamp = metric_data.get(
                                 key)[0][1]
-                            stop_fallback = datetime.fromtimestamp(first_timestamp)
-                        async_func_call = (None, self.time_series.find_datapoints,
-                                        *(self.db, org, resource,
-                                            key.split(".", 1)[1],
-                                            start, stop_fallback,
-                                            datapoints_fallback_dir,
-                                            available_metrics,
-                                            fallback_resolution))
+                            stop_fallback = datetime.fromtimestamp(
+                                first_timestamp) - delta_dt(fallback_resolution)
+                        async_func_call = (None,
+                                           self.time_series.find_datapoints,
+                                           *(self.db, org, resource,
+                                             key.split(".", 1)[1],
+                                             start, stop_fallback,
+                                             datapoints_fallback_dir,
+                                             available_metrics,
+                                             fallback_resolution))
                         metrics_data_fallback.append(async_func_call)
                         metric = next(iter(metric_data)).split(".", 1)[1]
                         metrics_served.append(metric)
@@ -128,17 +131,17 @@ class DBOperations:
                     # from the appropriate resolution, we try to get the asked
                     # time range in a lower resolution instead.
                     async_func_call = (None, self.time_series.find_datapoints,
-                                    *(self.db, org, resource,
-                                        metric,
-                                        start, stop,
-                                        datapoints_fallback_dir,
-                                        available_metrics,
-                                        fallback_resolution))
+                                       *(self.db, org, resource,
+                                         metric,
+                                         start, stop,
+                                         datapoints_fallback_dir,
+                                         available_metrics,
+                                         fallback_resolution))
                     metrics_data_fallback.append(async_func_call)
 
                 metrics_data_fallback = await asyncio.gather(
                     *(loop.run_in_executor(*metric_data_fallback)
-                    for metric_data_fallback in metrics_data_fallback),
+                      for metric_data_fallback in metrics_data_fallback),
                     return_exceptions=True)
 
                 for metric_data_fallback in metrics_data_fallback:
@@ -155,7 +158,7 @@ class DBOperations:
                             if data.get(key):
                                 data[key] = \
                                     filter_artifacts(start, stop,
-                                                    metric_data_fallback.get(key)) + \
+                                                     metric_data_fallback.get(key)) + \
                                     data[key]
                             else:
                                 data[key] = metric_data_fallback.get(key)
@@ -177,8 +180,7 @@ class DBOperations:
                 ("%s Could not fetch any of the %d metrics from resource: %s") % (
                     str(err.description, 'utf-8'), len(metrics), resource))
             return error(503, error_msg, traceback=traceback.format_exc(),
-                        request=str((resource, start, stop, metrics)))
-
+                         request=str((resource, start, stop, metrics)))
 
     @fdb.transactional
     def write_lines(self, tr, org, lines):
@@ -202,7 +204,8 @@ class DBOperations:
                         datapoints_dir=datapoints_dir['second']):
                     if not metrics.get(machine):
                         metrics[machine] = set()
-                    metrics[machine].add((machine_metric, type(value).__name__))
+                    metrics[machine].add(
+                        (machine_metric, type(value).__name__))
                     for resolution in self.resolutions:
                         if not datapoints_dir.get(resolution):
                             datapoints_dir[resolution] = \
@@ -213,7 +216,6 @@ class DBOperations:
                             dt, value, resolution,
                             datapoints_dir=datapoints_dir[resolution])
         return metrics
-
 
     @profile
     def write_in_queue(self, org, data):
@@ -228,8 +230,7 @@ class DBOperations:
             error_msg = ("%s on write_in_queue(data)" % (
                 str(err.description, 'utf-8')))
             return error(503, error_msg, traceback=traceback.format_exc(),
-                        request=str(data))
-
+                         request=str(data))
 
     def write_in_kv_base(self, org, data):
         try:
@@ -254,7 +255,7 @@ class DBOperations:
                     metrics.add(machine + "-" + metric + "-" + field)
 
             self.log.warning(("Request for resource: %s, number of metrics: %d," +
-                        " number of datapoints: %d") % (
+                              " number of datapoints: %d") % (
                 machine, len(metrics), total_datapoints))
 
             metrics = self.write_lines(self.db, org, data)
@@ -264,12 +265,11 @@ class DBOperations:
                 str(err.description, 'utf-8'),
                 parse_line(data[0])["tags"]["machine_id"]))
             return error(503, error_msg, traceback=traceback.format_exc(),
-                        request=str(data))
+                         request=str(data))
 
     @profile
     def write_in_kv(self, org, data):
         self.write_in_kv_base(org, data)
-
 
     @fdb.transactional
     def update_metrics(self, tr, org, new_metrics):
@@ -285,18 +285,17 @@ class DBOperations:
             for metric, metric_type in metrics:
                 if not (metric in current_metrics):
                     self.time_series.add_metric(tr, org,
-                                        (machine, metric),
-                                        metric_type)
-
+                                                (machine, metric),
+                                                metric_type)
 
     async def async_fetch_list(self, org, multiple_resources_and_metrics, start="",
-                            stop="", authorized_resources=None):
+                               stop="", authorized_resources=None):
         data = {}
         loop = asyncio.get_event_loop()
         data_list = [
             loop.run_in_executor(None, self.fetch_item, *
-                                (org, resources_and_metrics, start, stop,
-                                authorized_resources))
+                                 (org, resources_and_metrics, start, stop,
+                                  authorized_resources))
             for resources_and_metrics in multiple_resources_and_metrics
         ]
 
@@ -309,9 +308,8 @@ class DBOperations:
 
         return data
 
-
     def fetch_item(self, org, resources_and_metrics, start="", stop="",
-                authorized_resources=None):
+                   authorized_resources=None):
         resources, metrics = resources_and_metrics.split(".", 1)
         if is_regex(resources):
             regex_resources = resources
@@ -330,13 +328,12 @@ class DBOperations:
         loop.close()
         return data
 
-
     async def async_fetch_item(self, org, resources, start, stop, metrics):
         data = {}
         loop = asyncio.get_event_loop()
         data_list = [
             loop.run_in_executor(None, self.find_datapoints_per_resource, *
-                                (org, resource, start, stop, metrics))
+                                 (org, resource, start, stop, metrics))
             for resource in resources
         ]
 
@@ -353,7 +350,6 @@ class DBOperations:
         if data == {} and last_error:
             return last_error
         return data
-
 
     def find_datapoints_per_resource(self, org, resource, start, stop, metrics):
         data = {}

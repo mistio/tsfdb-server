@@ -65,14 +65,7 @@ def start_stop_key_tuples(
 
 
 def split_time_range(resolution, start, stop, limit):
-    if resolution == 'second':
-        delta = timedelta(seconds=1)
-    elif resolution == 'minute':
-        delta = timedelta(minutes=1)
-    elif resolution == 'hour':
-        delta = timedelta(hours=1)
-    else:
-        delta = timedelta(hours=24)
+    delta = delta_dt(resolution)
     if not limit or start == stop:
         return [start, stop + delta]
     time_ranges = []
@@ -156,3 +149,14 @@ def round_stop(stop, resolution):
         stop = stop.replace(second=0, minute=0,
                             hour=0)
     return stop
+
+
+def delta_dt(resolution):
+    if resolution == 'second':
+        return timedelta(seconds=1)
+    elif resolution == 'minute':
+        return timedelta(minutes=1)
+    elif resolution == 'hour':
+        return timedelta(hours=1)
+    else:
+        return timedelta(hours=24)
