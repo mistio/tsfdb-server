@@ -85,6 +85,28 @@ update_chart_tsfdb_image_tags:
       - chart/tsfdb/values.yaml
   dependencies: []
 
+update_chart_tsfdb_version:
+  stage: build
+  image: docker/compose:alpine-1.25.4
+  before_script:
+    - apk add --no-cache gettext
+  script:
+    - mkdir -p artifacts
+    - export VERSION=${CI_COMMIT_TAG:1}
+    - echo "VERSION=$VERSION"
+    - envsubst < chart/tsfdb/Chart.yaml > artifacts/Chart.yaml
+    - cp artifacts/Chart.yaml chart/tsfdb/Chart.yaml
+  artifacts:
+    paths:
+      - chart/tsfdb/Chart.yaml
+  only:
+    # only for references that match a version string (v1.2.3)
+    - /^v\d+\.\d+\.\d+$/
+  except:
+    # Except branches, meaning it'll only apply to git tags
+    - branches
+  dependencies: []
+
 
 #################### RELEASE STAGE ####################
 
@@ -180,3 +202,4 @@ helm_chart_release:
     - branches
   dependencies:
     - update_chart_tsfdb_image_tags
+    - update_chart_tsfdb_version
