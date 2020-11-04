@@ -16,3 +16,7 @@ fdb:
   knobRelocationParallelismPerSourceServer: 6
   knobFetchKeysParallelismBytes: 10e6
   knobMaxOutstanding: 256
+  backup: false
+  backupKey:
+  backupHost: s3.amazonaws.com
+  backupSecret:

@@ -1,0 +1,72 @@
+{{ if and (.Values.fdb.deploy) (.Values.fdb.backup) -}}
+apiVersion: apps.foundationdb.org/v1beta1
+kind: FoundationDBBackup
+metadata:
+  name: {{ include "chart.fullname" . }}-fdb
+spec:
+  version: 6.2.20
+  clusterName: {{ include "chart.fullname" . }}-fdb
+  accountName: {{ .Values.fdb.backupKey }}{{ "@" }}{{ .Values.fdb.backupHost }}
+  bucket: {{ .Values.fdb.backupBucket }}
+  snapshotPeriodSeconds: 60
+  podTemplateSpec:
+    spec:
+      containers:
+        - name: foundationdb
+          env:
+            - name: FDB_BLOB_CREDENTIALS
+              value: /var/backup-credentials/credentials
+          volumeMounts:
+            - name: backup-credentials
+              mountPath: /var/backup-credentials
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            runAsGroup: 0
+            runAsUser: 0
+        - name: foundationdb-kubernetes-sidecar
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            runAsUser: 0
+      initContainers:
+        - name: foundationdb-kubernetes-init
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            runAsUser: 0
+      volumes:
+        - name: backup-credentials
+          secret:
+            secretName: backup-credentials
+---
+apiVersion: v1
+kind: Secret
+metadata:
+    name: backup-credentials
+type: Opaque
+stringData:
+    credentials: |
+        {
+            "accounts": {
+                "{{ .Values.fdb.backupKey }}{{ "@" }}{{ .Values.fdb.backupHost }}": {
+                    "secret" : "{{ .Values.fdb.backupSecret }}"
+                }
+            }
+        }
+{{- end }}
