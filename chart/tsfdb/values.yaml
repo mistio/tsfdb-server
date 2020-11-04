@@ -20,3 +20,4 @@ fdb:
   backupKey:
   backupHost: s3.amazonaws.com
   backupSecret:
+  backupBucket:
