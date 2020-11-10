@@ -6,7 +6,7 @@ metadata:
 spec:
   version: 6.2.20
   clusterName: {{ include "chart.fullname" . }}-fdb
-  accountName: {{ .Values.fdb.backupKey }}{{ "@" }}{{ .Values.fdb.backupHost }}
+  accountName: {{ .Values.fdb.backupKey }}{{ "@" }}{{ .Values.fdb.backupHost }}{{ ":" }}{{ .Values.fdb.backupPort }}
   bucket: {{ .Values.fdb.backupBucket }}
   snapshotPeriodSeconds: 60
   podTemplateSpec:
@@ -22,22 +22,12 @@ spec:
           resources:
             limits:
               cpu: 250m
-              memory: 128Mi
+              memory: 256Mi
             requests:
               cpu: 250m
-              memory: 128Mi
+              memory: 256Mi
           securityContext:
             runAsGroup: 0
-            runAsUser: 0
-        - name: foundationdb-kubernetes-sidecar
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
-          securityContext:
             runAsUser: 0
       initContainers:
         - name: foundationdb-kubernetes-init

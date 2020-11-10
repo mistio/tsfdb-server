@@ -18,6 +18,7 @@ fdb:
   knobMaxOutstanding: 256
   backup: false
   backupKey:
-  backupHost: s3.amazonaws.com
+  backupHost:
+  backupPort:
   backupSecret:
   backupBucket:
