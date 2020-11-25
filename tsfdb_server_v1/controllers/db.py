@@ -63,7 +63,11 @@ class DBOperations:
     async def async_find_datapoints(self, org, resource, start, stop, metrics):
         metrics_data = []
         try:
-            loop = asyncio.get_event_loop()
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
             data = {}
             start, stop = parse_start_stop_params(start, stop)
 
@@ -313,7 +317,11 @@ class DBOperations:
     async def async_fetch_list(self, org, multiple_resources_and_metrics,
                                start="", stop="", authorized_resources=None):
         data = {}
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         data_list = [
             loop.run_in_executor(None, self.fetch_item, *
                                  (org, resources_and_metrics, start, stop,
@@ -342,9 +350,11 @@ class DBOperations:
         else:
             resources = [resources]
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         data = loop.run_until_complete(
             self.async_fetch_item(org, resources, start, stop, metrics))
         loop.close()
@@ -352,7 +362,11 @@ class DBOperations:
 
     async def async_fetch_item(self, org, resources, start, stop, metrics):
         data = {}
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         data_list = [
             loop.run_in_executor(None, self.find_datapoints_per_resource, *
                                  (org, resource, start, stop, metrics))
@@ -395,8 +409,11 @@ class DBOperations:
                 return error(400, error_msg, self.log)
         else:
             metrics = [metrics]
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         current_data = loop.run_until_complete(
             self.async_find_datapoints(org, resource, start, stop, metrics))
         loop.close()

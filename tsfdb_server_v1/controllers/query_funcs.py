@@ -69,7 +69,11 @@ def fetch(db_ops, resources_and_metrics, start="", stop="", step=""):
     else:
         multiple_resources_and_metrics = resources_and_metrics
 
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     data = loop.run_until_complete(
         db_ops.async_fetch_list(
             org, multiple_resources_and_metrics, start, stop,

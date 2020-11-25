@@ -97,8 +97,11 @@ class TimeSeriesLayer():
                 resource, metric, start,
                 stop, stat, self.limit
             )
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
             datapoints_per_stat[stat] = loop.run_until_complete(
                 self.__async_find_datapoints_per_stat(db, tuples,
                                                       resolution,
@@ -125,7 +128,11 @@ class TimeSeriesLayer():
                                                org, resource, metric, stat,
                                                datapoints_dir=None,
                                                available_metrics=None):
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         data_lists = [
             loop.run_in_executor(None, self.__find_datapoints_per_stat, *
                                  (db, start, stop, resolution,
