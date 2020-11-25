@@ -18,11 +18,12 @@ fdb.api_version(620)
 
 
 class DBOperations:
-    def __init__(self, series_type="monitoring"):
+    def __init__(self, series_type="monitoring", resolution=""):
         self.log = logging.getLogger(__name__)
         self.resolutions = ("minute", "hour", "day")
         self.db = self.open_db()
         self.time_series = TimeSeriesLayer(series_type)
+        self.resolution = resolution
 
     @staticmethod
     def open_db():
@@ -36,22 +37,26 @@ class DBOperations:
         try:
             return self.time_series.find_metrics(self.db, org, resource)
         except fdb.FDBError as err:
-            error_msg = ("%s on find_metrics(resource) with resource_id: %s" % (
-                str(err.description, 'utf-8'),
-                resource))
+            error_msg = (
+                "%s on find_metrics(resource) with resource_id: %s" % (
+                    str(err.description, 'utf-8'),
+                    resource))
             return error(503, error_msg, traceback=traceback.format_exc(),
                          request=resource)
 
     def find_resources(self, org, regex_resources, authorized_resources=None):
         try:
-            return self.time_series.find_resources(self.db, org, regex_resources,
+            return self.time_series.find_resources(self.db, org,
+                                                   regex_resources,
                                                    authorized_resources)
         except fdb.FDBError as err:
             error_msg = (
-                "%s on find_resources(regex_resources) with regex_resources: %s"
+                ("%s on find_resources(regex_resources)" +
+                 " with regex_resources: %s")
                 % (
                     str(err.description, 'utf-8'),
-                    regex_resources))
+                    regex_resources)
+            )
             return error(503, error_msg, traceback=traceback.format_exc(),
                          request=regex_resources)
 
@@ -65,20 +70,26 @@ class DBOperations:
             time_range = stop - start
             time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
 
-            resolution = time_range_to_resolution(time_range_in_hours)
-            fallback_resolution = get_fallback_resolution(resolution)
+            resolution = self.resolution
+            fallback_resolution = None
+            if not resolution:
+                resolution = time_range_to_resolution(time_range_in_hours)
+                fallback_resolution = get_fallback_resolution(resolution)
             available_metrics = fdb.directory.create_or_open(
-                self.db, (self.time_series.series_type, org, 'available_metrics'))
+                self.db, (self.time_series.series_type, org,
+                          'available_metrics'))
             datapoints_dir = fdb.directory.create_or_open(
-                self.db, (self.time_series.series_type, org, resource, resolution))
+                self.db, (self.time_series.series_type, org, resource,
+                          resolution))
             if fallback_resolution:
                 datapoints_fallback_dir = fdb.directory.create_or_open(
-                    self.db, (self.time_series.series_type, org, resource, fallback_resolution))
+                    self.db, (self.time_series.series_type, org, resource,
+                              fallback_resolution))
 
             metrics_data = [
                 loop.run_in_executor(None, self.time_series.find_datapoints,
-                                     *(self.db, org, resource, metric, start, stop,
-                                       datapoints_dir, available_metrics,
+                                     *(self.db, org, resource, metric, start,
+                                       stop, datapoints_dir, available_metrics,
                                        resolution))
                 for metric in metrics
             ]
@@ -99,17 +110,18 @@ class DBOperations:
                 elif metric_data:
                     if fallback_resolution:
                         # In case we have data from the appropriate resolution,
-                        # according to our config, we try to fill the gaps if any,
-                        # from the start of the asked time range till the oldest
-                        # datapoint e.g. [start, oldest datapoint, stop] ->
-                        # [start, oldest datapoint]
+                        # according to our config, we try to fill the gaps if
+                        # any, from the start of the asked time range till the
+                        # oldest datapoint e.g. [start, oldest datapoint, stop]
+                        #  -> [start, oldest datapoint]
                         stop_fallback = stop
                         key = next(iter(metric_data))
                         if metric_data.get(key):
                             first_timestamp = metric_data.get(
                                 key)[0][1]
                             stop_fallback = datetime.fromtimestamp(
-                                first_timestamp) - delta_dt(fallback_resolution)
+                                first_timestamp) - delta_dt(
+                                    fallback_resolution)
                         async_func_call = (None,
                                            self.time_series.find_datapoints,
                                            *(self.db, org, resource,
@@ -158,7 +170,8 @@ class DBOperations:
                             if data.get(key):
                                 data[key] = \
                                     filter_artifacts(start, stop,
-                                                     metric_data_fallback.get(key)) + \
+                                                     metric_data_fallback.get(
+                                                         key)) + \
                                     data[key]
                             else:
                                 data[key] = metric_data_fallback.get(key)
@@ -177,8 +190,10 @@ class DBOperations:
             return data
         except fdb.FDBError as err:
             error_msg = (
-                ("%s Could not fetch any of the %d metrics from resource: %s") % (
-                    str(err.description, 'utf-8'), len(metrics), resource))
+                (("%s Could not fetch any of the" +
+                  " %d metrics from resource: %s")) % (
+                    str(err.description, 'utf-8'), len(metrics), resource)
+            )
             return error(503, error_msg, traceback=traceback.format_exc(),
                          request=str((resource, start, stop, metrics)))
 
@@ -198,9 +213,13 @@ class DBOperations:
                 machine_metric = "%s.%s" % (metric, field)
                 if not datapoints_dir.get("second"):
                     datapoints_dir["second"] = fdb.directory.create_or_open(
-                        tr, (self.time_series.series_type, org, machine, 'second'))
-                if self.time_series.write_datapoint(tr, org, machine, key_tuple_second(
-                    dt, machine_metric), value,
+                        tr, (self.time_series.series_type, org, machine,
+                             'second'))
+                if self.time_series.write_datapoint(
+                        tr, org, machine,
+                        key_tuple_second(
+                            dt, machine_metric),
+                        value,
                         datapoints_dir=datapoints_dir['second']):
                     if not metrics.get(machine):
                         metrics[machine] = set()
@@ -210,7 +229,8 @@ class DBOperations:
                         if not datapoints_dir.get(resolution):
                             datapoints_dir[resolution] = \
                                 fdb.directory.create_or_open(
-                                tr, (self.time_series.series_type, org, machine, resolution))
+                                tr, (self.time_series.series_type, org,
+                                     machine, resolution))
                         self.time_series.write_datapoint_aggregated(
                             tr, org, machine, machine_metric,
                             dt, value, resolution,
@@ -254,8 +274,9 @@ class DBOperations:
                 for field, _ in dict_line["fields"].items():
                     metrics.add(machine + "-" + metric + "-" + field)
 
-            self.log.warning(("Request for resource: %s, number of metrics: %d," +
-                              " number of datapoints: %d") % (
+            self.log.warning((
+                "Request for resource: %s, number of metrics: %d," +
+                " number of datapoints: %d") % (
                 machine, len(metrics), total_datapoints))
 
             metrics = self.write_lines(self.db, org, data)
@@ -280,7 +301,8 @@ class DBOperations:
             current_metrics = {
                 m for m in current_metrics.keys(
                 ) if not abs(timestamp_now - current_metrics.get(m, {}).get(
-                    "last_updated", 0)) / 60 > config('ACTIVE_METRIC_MINUTES') / 2
+                    "last_updated", 0)) / 60 >
+                config('ACTIVE_METRIC_MINUTES') / 2
             }
             for metric, metric_type in metrics:
                 if not (metric in current_metrics):
@@ -288,8 +310,8 @@ class DBOperations:
                                                 (machine, metric),
                                                 metric_type)
 
-    async def async_fetch_list(self, org, multiple_resources_and_metrics, start="",
-                               stop="", authorized_resources=None):
+    async def async_fetch_list(self, org, multiple_resources_and_metrics,
+                               start="", stop="", authorized_resources=None):
         data = {}
         loop = asyncio.get_event_loop()
         data_list = [
@@ -351,7 +373,8 @@ class DBOperations:
             return last_error
         return data
 
-    def find_datapoints_per_resource(self, org, resource, start, stop, metrics):
+    def find_datapoints_per_resource(self, org, resource, start, stop,
+                                     metrics):
         data = {}
         if is_regex(metrics):
             regex_metric = metrics

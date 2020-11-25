@@ -49,6 +49,7 @@ def mean(data):
             data[metric].append([sum(values)/len(values), timestamp])
     return data
 
+
 def fetch(db_ops, resources_and_metrics, start="", stop="", step=""):
     # We take for granted that all metrics start with the id and that
     # it ends on the first occurence of a dot, e.g id.system.load1
@@ -77,13 +78,18 @@ def fetch(db_ops, resources_and_metrics, start="", stop="", step=""):
         return mean(roundY(data, base=parse_relative_time_to_seconds(step)))
     return data
 
-def fetch_monitoring(resources_and_metrics, start="", stop="", step=""):
-    db_ops = DBOperations()
+
+def fetch_monitoring(resources_and_metrics, start="", stop="", step="",
+                     resolution=""):
+    db_ops = DBOperations(resolution=resolution)
     return fetch(db_ops, resources_and_metrics, start, stop, step)
 
-def fetch_metering(resources_and_metrics, start="", stop="", step=""):
-    db_ops = DBOperations("metering")
+
+def fetch_metering(resources_and_metrics, start="", stop="", step="",
+                   resolution=""):
+    db_ops = DBOperations(series_type="metering", resolution=resolution)
     return fetch(db_ops, resources_and_metrics, start, stop, step)
+
 
 def deriv(data):
     if not isinstance(data, dict) or not data:
