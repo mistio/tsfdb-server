@@ -13,6 +13,7 @@ tsfdb_server_v1/__main__.py
 tsfdb_server_v1/controllers/__init__.py
 tsfdb_server_v1/controllers/datapoints_controller.py
 tsfdb_server_v1/controllers/internal_controller.py
+tsfdb_server_v1/controllers/metering_controller.py
 tsfdb_server_v1/controllers/resources_controller.py
 tsfdb_server_v1/controllers/security_controller_.py
 tsfdb_server_v1/encoder.py
@@ -21,8 +22,9 @@ tsfdb_server_v1/models/base_model_.py
 tsfdb_server_v1/models/datapoints_response.py
 tsfdb_server_v1/models/error.py
 tsfdb_server_v1/models/resource.py
-tsfdb_server_v1/models/series_response.py
+tsfdb_server_v1/models/series.py
 tsfdb_server_v1/openapi/openapi.yaml
 tsfdb_server_v1/test/__init__.py
+tsfdb_server_v1/test/test_metering_controller.py
 tsfdb_server_v1/typing_utils.py
 tsfdb_server_v1/util.py

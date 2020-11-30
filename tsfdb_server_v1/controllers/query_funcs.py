@@ -7,7 +7,7 @@ import json
 from .helpers import round_base, error, parse_relative_time_to_seconds, \
     parse_start_stop_params
 from datetime import datetime
-from .db import async_fetch_list
+from .db import DBOperations
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
@@ -49,8 +49,7 @@ def mean(data):
             data[metric].append([sum(values)/len(values), timestamp])
     return data
 
-
-def fetch(resources_and_metrics, start="", stop="", step=""):
+def fetch(db_ops, resources_and_metrics, start="", stop="", step=""):
     # We take for granted that all metrics start with the id and that
     # it ends on the first occurence of a dot, e.g id.system.load1
     start, stop = parse_start_stop_params(start, stop)
@@ -71,13 +70,20 @@ def fetch(resources_and_metrics, start="", stop="", step=""):
 
     loop = asyncio.get_event_loop()
     data = loop.run_until_complete(
-        async_fetch_list(
+        db_ops.async_fetch_list(
             org, multiple_resources_and_metrics, start, stop,
             authorized_resources))
     if not isinstance(data, Error) and step:
         return mean(roundY(data, base=parse_relative_time_to_seconds(step)))
     return data
 
+def fetch_monitoring(resources_and_metrics, start="", stop="", step=""):
+    db_ops = DBOperations()
+    return fetch(db_ops, resources_and_metrics, start, stop, step)
+
+def fetch_metering(resources_and_metrics, start="", stop="", step=""):
+    db_ops = DBOperations("metering")
+    return fetch(db_ops, resources_and_metrics, start, stop, step)
 
 def deriv(data):
     if not isinstance(data, dict) or not data:

@@ -87,8 +87,9 @@ def parse_start_stop_params(start, stop):
 
 def parse_time(dt):
     # Convert "y" to "years" since dateparser doesn't support it
-    # e.g. -2y => -2years
+    # e.g. -2y => -2years, same for day and days
     dt = re.sub("y$", "years", dt)
+    dt = re.sub("day$", "days", dt)
     if re.match(".*ms", dt):
         dt = dt.replace("ms", "")
         dt = "%ds" % int(float(dt) / 1000)
@@ -128,7 +129,7 @@ def generate_metric(tags, measurement):
         # Ignore the value if it is empty
         if processed_value and processed_tag:
             metric += ("-%s" % processed_value)
-        # Accomodate for the possibility
+        # Accommodate for the possibility
         # that there is a value with an empty tag
         elif processed_value:
             metric += (".%s" % processed_value)
@@ -171,8 +172,9 @@ def profile(func):
                         "stats,machine_id=tsfdb,func=%s" +
                         " latency=%f %s") %
                         (func.__name__, dt, timestamp))
-                    from tsfdb_server_v1.controllers.db import write_in_kv
-                    write_in_kv("tsfdb", line + "\n")
+                    from tsfdb_server_v1.controllers.db import DBOperations
+                    db_ops = DBOperations()
+                    db_ops.write_in_kv_base("tsfdb", line + "\n")
 
     return wrap
 
@@ -250,7 +252,7 @@ def get_fallback_resolution(resolution):
     return fallback_resolutions.get(resolution)
 
 
-def seperate_metrics(data):
+def separate_metrics(data):
     data = data.split('\n')
     # Get rid of all empty lines
     data = [line for line in data if line != ""]

@@ -4,7 +4,7 @@ import six
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 from tsfdb_server_v1.models.resource import Resource  # noqa: E501
 from tsfdb_server_v1 import util
-from .db import find_metrics
+from .db import DBOperations
 
 
 def list_metrics_by_resource(resource_id, x_org_id):  # noqa: E501
@@ -19,7 +19,8 @@ def list_metrics_by_resource(resource_id, x_org_id):  # noqa: E501
 
     :rtype: Resource
     """
-    data = find_metrics(x_org_id, resource_id)
+    db_ops = DBOperations()
+    data = db_ops.find_metrics(x_org_id, resource_id)
     if isinstance(data, Error):
         return data
     else:
