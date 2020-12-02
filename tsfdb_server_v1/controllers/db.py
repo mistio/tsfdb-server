@@ -120,9 +120,9 @@ class DBOperations:
                         #  -> [start, oldest datapoint]
                         stop_fallback = stop
                         key = next(iter(metric_data))
-                        if metric_data.get(key):
+                        if metric_data.get(key, {}).get("value"):
                             first_timestamp = metric_data.get(
-                                key)[0][1]
+                                key)["value"][0][1]
                             stop_fallback = datetime.fromtimestamp(
                                 first_timestamp) - delta_dt(
                                     fallback_resolution)
@@ -170,15 +170,21 @@ class DBOperations:
                         print(last_exception)
                     elif metric_data_fallback:
                         key = next(iter(metric_data_fallback))
-                        if metric_data_fallback.get(key):
-                            if data.get(key):
-                                data[key] = \
-                                    filter_artifacts(start, stop,
-                                                     metric_data_fallback.get(
-                                                         key)) + \
-                                    data[key]
-                            else:
-                                data[key] = metric_data_fallback.get(key)
+                        for stat in (self.time_series.stats_aggregation + (
+                                "value",)):
+                            if metric_data_fallback.get(key, {}).get(stat):
+                                if data.get(key, {}).get(stat):
+                                    data[key][stat] = \
+                                        filter_artifacts(
+                                            start, stop,
+                                        metric_data_fallback.get(
+                                            key).get(stat)) + \
+                                        data[key][stat]
+                                else:
+                                    if not data.get(key):
+                                        data[key] = {}
+                                    data[key][stat] = metric_data_fallback.get(
+                                        key, {}).get(stat)
 
             if last_error:
                 if not data:

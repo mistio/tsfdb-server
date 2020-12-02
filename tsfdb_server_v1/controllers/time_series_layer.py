@@ -21,6 +21,7 @@ class TimeSeriesLayer():
         self.struct_types = (int, float)
         self.limit = config('DATAPOINTS_PER_READ')
         self.series_type = series_type
+        self.stats_aggregation = ("count", "sum", "max", "min")
 
     @fdb.transactional
     def find_orgs(self, tr):
@@ -77,12 +78,14 @@ class TimeSeriesLayer():
             time_range_in_hours = round(time_range.total_seconds() / 3600, 2)
             resolution = time_range_to_resolution(time_range_in_hours)
         if resolution != 'second':
-            stats = ("count", "sum")
+            stats = self.stats_aggregation
         start = round_start(start, resolution)
         stop = round_stop(stop, resolution)
 
         if start > stop:
-            return {("%s.%s" % (resource, metric)): []}
+            return {("%s.%s" % (resource, metric)): {stat: None for stat in
+                                                     self.stats_aggregation
+                                                     + ("value",)}}
 
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(
@@ -113,12 +116,17 @@ class TimeSeriesLayer():
             if isinstance(datapoints_per_stat[stat], Error):
                 return datapoints_per_stat[stat]
 
+        datapoints = {}
+
         if resolution != 'second':
-            datapoints = div_datapoints(list(
+            datapoints["value"] = div_datapoints(list(
                 datapoints_per_stat["sum"]),
                 list(datapoints_per_stat["count"]))
         else:
-            datapoints = list(datapoints_per_stat[None])
+            datapoints["value"] = list(datapoints_per_stat[None])
+
+        for stat in self.stats_aggregation:
+            datapoints[stat] = datapoints_per_stat.get(stat)
 
         return {("%s.%s" % (resource, metric)): datapoints}
 
@@ -282,7 +290,7 @@ class TimeSeriesLayer():
                           metric, start, stop, resolution):
         stats = (None,)
         if resolution != 'second':
-            stats = ("count", "sum")
+            stats = self.stats_aggregation
 
         for stat in stats:
             tuples = start_stop_key_tuples(

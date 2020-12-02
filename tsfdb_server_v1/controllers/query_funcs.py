@@ -11,16 +11,20 @@ from .db import DBOperations
 from tsfdb_server_v1.models.error import Error  # noqa: E501
 
 log = logging.getLogger(__name__)
+stats = ("value", "count", "sum", "max", "min")
 
 
 def roundX(data, precision=0, base=1):
     if not isinstance(data, dict) or not data:
         return {}
     for metric, datapoints in data.items():
-        data[metric] = [
-            [round_base(x, precision, base), y]
-            for x, y in datapoints
-        ]
+        for stat in stats:
+            if not data[metric].get(stat):
+                continue
+            data[metric][stat] = [
+                [round_base(x, precision, base), y]
+                for x, y in datapoints[stat]
+            ]
     return data
 
 
@@ -28,10 +32,13 @@ def roundY(data, precision=0, base=1):
     if not isinstance(data, dict) or not data:
         return {}
     for metric, datapoints in data.items():
-        data[metric] = [
-            [x, round_base(y, precision, base)]
-            for x, y in datapoints
-        ]
+        for stat in stats:
+            if not data[metric].get(stat):
+                continue
+            data[metric][stat] = [
+                [x, round_base(y, precision, base)]
+                for x, y in datapoints[stat]
+            ]
     return data
 
 
@@ -39,14 +46,18 @@ def mean(data):
     if not isinstance(data, dict) or not data:
         return {}
     for metric, datapoints in data.items():
-        mean_data = {}
-        for value, timestamp in datapoints:
-            if not mean_data.get(timestamp):
-                mean_data[timestamp] = []
-            mean_data[timestamp].append(value)
-        data[metric] = []
-        for timestamp, values in mean_data.items():
-            data[metric].append([sum(values)/len(values), timestamp])
+        for stat in stats:
+            if not datapoints.get(stat):
+                continue
+            mean_data = {}
+            for value, timestamp in datapoints[stat]:
+                if not mean_data.get(timestamp):
+                    mean_data[timestamp] = []
+                mean_data[timestamp].append(value)
+            data[metric][stat] = []
+            for timestamp, values in mean_data.items():
+                data[metric][stat].append(
+                    [sum(values)/len(values), timestamp])
     return data
 
 
@@ -99,33 +110,36 @@ def deriv(data):
     if not isinstance(data, dict) or not data:
         return {}
     for metric, datapoints in data.items():
-        if not datapoints or len(datapoints) < 2:
-            data[metric] = []
-            continue
-        values = np.asarray([value for value, _ in datapoints])
-        timestamps = np.asarray([timestamp for _, timestamp in datapoints])
-        values_deriv = np.gradient(values, timestamps)
-        data[metric] = [
-            [value_deriv.tolist(), timestamp.tolist()]
-            for value_deriv, timestamp in zip(
-                np.nditer(values_deriv), np.nditer(timestamps)
-            )
-        ]
+        for stat in stats:
+            if not datapoints.get(stat) or len(datapoints.get(stat)) < 2:
+                data[metric][stat] = []
+                continue
+            values = np.asarray([value for value, _ in datapoints[stat]])
+            timestamps = np.asarray(
+                [timestamp for _, timestamp in datapoints[stat]])
+            values_deriv = np.gradient(values, timestamps)
+            data[metric][stat] = [
+                [value_deriv.tolist(), timestamp.tolist()]
+                for value_deriv, timestamp in zip(
+                    np.nditer(values_deriv), np.nditer(timestamps)
+                )
+            ]
     return data
 
 
-def topk(data, k=20):
+def topk(data, k=20, stat="value"):
     if not isinstance(data, dict) or not data:
         return {}
     sum_data = {}
     top_data = {}
     for metric, datapoints in data.items():
-        if datapoints:
-            sum_data[metric] = sum(x for x, y in datapoints)/len(datapoints)
+        if datapoints[stat]:
+            sum_data[metric] = sum(
+                x for x, y in datapoints[stat])/len(datapoints[stat])
         else:
             sum_data[metric] = 0
-    for metric, datapoints in sorted(sum_data.items(),
-                                     key=lambda item: item[1],
-                                     reverse=True)[0:k]:
+    for metric, _ in sorted(sum_data.items(),
+                            key=lambda item: item[1],
+                            reverse=True)[0:k]:
         top_data[metric] = data[metric]
     return top_data
