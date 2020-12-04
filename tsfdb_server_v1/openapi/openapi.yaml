@@ -68,9 +68,10 @@ paths:
         style: simple
       requestBody:
         content:
-          text/plain:
+          application/json:
             schema:
-              type: string
+              additionalProperties: true
+              type: object
         description: Datapoints object to write
         required: true
       responses:
@@ -83,6 +84,38 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: unexpected error
       summary: Write datapoints to db
+      tags:
+      - datapoints
+      x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
+  /datapoints/influxdb:
+    post:
+      operationId: write_datapoints_influxdb
+      parameters:
+      - description: Organization id
+        explode: false
+        in: header
+        name: x-org-id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: string
+        description: Influxdb datapoints to write
+        required: true
+      responses:
+        "200":
+          description: Write success response
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: unexpected error
+      summary: Write influxdb datapoints to db
       tags:
       - datapoints
       x-openapi-router-controller: tsfdb_server_v1.controllers.datapoints_controller
@@ -161,9 +194,10 @@ paths:
         style: simple
       requestBody:
         content:
-          text/plain:
+          application/json:
             schema:
-              type: string
+              additionalProperties: true
+              type: object
         description: Datapoints object to write
         required: true
       responses:
@@ -176,6 +210,38 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: unexpected error
       summary: Write metering datapoints to db
+      tags:
+      - metering
+      x-openapi-router-controller: tsfdb_server_v1.controllers.metering_controller
+  /metering/datapoints/influxdb:
+    post:
+      operationId: write_metering_datapoints_influxdb
+      parameters:
+      - description: Organization id
+        explode: false
+        in: header
+        name: x-org-id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: string
+        description: Influxdb datapoints to write
+        required: true
+      responses:
+        "200":
+          description: Write success response
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: unexpected error
+      summary: Write influxdb metering datapoints to db
       tags:
       - metering
       x-openapi-router-controller: tsfdb_server_v1.controllers.metering_controller
