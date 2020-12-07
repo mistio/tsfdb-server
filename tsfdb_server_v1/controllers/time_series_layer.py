@@ -83,9 +83,11 @@ class TimeSeriesLayer():
         stop = round_stop(stop, resolution)
 
         if start > stop:
-            return {("%s.%s" % (resource, metric)): {stat: None for stat in
-                                                     self.stats_aggregation
-                                                     + ("value",)}}
+            datapoints = {stat: None for stat in self.stats_aggregation
+                          + ("value",)}
+            datapoints.update({"resolution": resolution})
+
+            return {("%s.%s" % (resource, metric)): datapoints}
 
         if not available_metrics:
             available_metrics = fdb.directory.create_or_open(
@@ -127,6 +129,7 @@ class TimeSeriesLayer():
 
         for stat in self.stats_aggregation:
             datapoints[stat] = datapoints_per_stat.get(stat)
+        datapoints.update({"resolution": resolution})
 
         return {("%s.%s" % (resource, metric)): datapoints}
 
@@ -265,6 +268,49 @@ class TimeSeriesLayer():
         tr.max(datapoints_dir.pack(
             time_aggregate_tuple(metric, "max", dt, resolution)),
             struct.pack('<q', value))
+
+    @fdb.transactional
+    def write_stat_aggregated(self, tr, org, resource,
+                              metric, stat, dt, value, resolution,
+                              datapoints_dir=None):
+        if type(value) not in self.struct_types:
+            log.warning("Unsupported aggregation value type: %s" %
+                        str(type(value)))
+            return
+        if type(value) is float:
+            value *= 1000
+            value = int(value)
+        if not config('AGGREGATE_%s' % resolution.upper()):
+            # log something
+            return
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, (self.series_type, org, resource, resolution))
+        tr[datapoints_dir.pack(
+            time_aggregate_tuple(metric, stat, dt, resolution))] = struct.pack(
+                '<q', value)
+
+    @fdb.transactional
+    def write_stat_aggregated2(self, tr, org, resource,
+                               metric, stat, dt, value, resolution,
+                               datapoints_dir=None):
+        funcs = {"min": tr.min, "max": tr.max}
+        if type(value) not in self.struct_types:
+            log.warning("Unsupported aggregation value type: %s" %
+                        str(type(value)))
+            return
+        if type(value) is float:
+            value *= 1000
+            value = int(value)
+        if not config('AGGREGATE_%s' % resolution.upper()):
+            # log something
+            return
+        if not datapoints_dir:
+            datapoints_dir = fdb.directory.create_or_open(
+                tr, (self.series_type, org, resource, resolution))
+        funcs.get(stat, tr.add)(datapoints_dir.pack(
+            time_aggregate_tuple(metric, stat, dt, resolution)), struct.pack(
+                '<q', value))
 
     @fdb.transactional
     def add_metric(self, tr, org, metric, metric_type):

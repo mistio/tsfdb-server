@@ -1,6 +1,7 @@
 import connexion
 import six
 import logging
+import json
 
 from RestrictedPython import compile_restricted
 from RestrictedPython import safe_builtins
@@ -57,8 +58,27 @@ def write_datapoints(x_org_id, body):  # noqa: E501
 
     :param x_org_id: Organization id
     :type x_org_id: str
-    :param body: Datapoints object to write
-    :type body:
+    :param request_body: Datapoints object to write
+    :type request_body: Dict[str, ]
+
+    :rtype: None
+    """
+    db_ops = DBOperations()
+    body = json.dumps(body)
+    if config('WRITE_IN_QUEUE'):
+        options = {"format": "json"}
+        db_ops.write_in_queue(x_org_id, body, options)
+
+
+def write_datapoints_influxdb(x_org_id, body):  # noqa: E501
+    """Write influxdb datapoints to db
+
+     # noqa: E501
+
+    :param x_org_id: Organization id
+    :type x_org_id: str
+    :param body: Influxdb datapoints to write
+    :type body: str
 
     :rtype: None
     """
@@ -67,8 +87,9 @@ def write_datapoints(x_org_id, body):  # noqa: E501
     if config('WRITE_IN_QUEUE'):
         body_tsfdb, body_rest = separate_metrics(body)
         if body_tsfdb:
-            db_ops.write_in_kv(x_org_id, body_tsfdb)
+            db_ops.write_in_kv(x_org_id, body_tsfdb, format="influxdb")
         if body_rest:
-            db_ops.write_in_queue(x_org_id, body_rest)
+            options = {"format": "influxdb"}
+            db_ops.write_in_queue(x_org_id, body_rest, options)
     else:
         db_ops.write_in_kv(x_org_id, body)

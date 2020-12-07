@@ -4,6 +4,7 @@ import fdb.tuple
 import re
 import logging
 import traceback
+import json
 from .tsfdb_tuple import key_tuple_second, delta_dt
 from .helpers import error, parse_start_stop_params, \
     generate_metric, profile, is_regex, config, get_queue_id, \
@@ -208,7 +209,7 @@ class DBOperations:
                          request=str((resource, start, stop, metrics)))
 
     @fdb.transactional
-    def write_lines(self, tr, org, lines):
+    def write_influxdb(self, tr, org, lines):
         metrics = {}
         datapoints_dir = {}
         for line in lines:
@@ -247,14 +248,80 @@ class DBOperations:
                             datapoints_dir=datapoints_dir[resolution])
         return metrics
 
+    @fdb.transactional
+    def write_json(self, tr, org, data):
+        metrics = {}
+        datapoints_dir = {}
+        for key, datapoints in data.items():
+            machine, machine_metric = key.split(".", 1)
+            resolution = datapoints.get("resolution", "minute")
+            if resolution == "second":
+                if not datapoints_dir.get("second"):
+                    datapoints_dir["second"] = fdb.directory.create_or_open(
+                        tr, (self.time_series.series_type, org, machine,
+                             'second'))
+                for value, timestamp in datapoints.get("value"):
+                    dt = datetime.fromtimestamp(timestamp)
+                    if self.time_series.write_datapoint(
+                            tr, org, machine,
+                            key_tuple_second(
+                                dt, machine_metric),
+                            value,
+                            datapoints_dir=datapoints_dir['second']):
+                        if not metrics.get(machine):
+                            metrics[machine] = set()
+                        metrics[machine].add(
+                            (machine_metric, type(value).__name__))
+                        for resolution in self.resolutions:
+                            if not datapoints_dir.get(resolution):
+                                datapoints_dir[resolution] = \
+                                    fdb.directory.create_or_open(
+                                    tr, (self.time_series.series_type, org,
+                                         machine, resolution))
+                            self.time_series.write_datapoint_aggregated(
+                                tr, org, machine, machine_metric,
+                                dt, value, resolution,
+                                datapoints_dir=datapoints_dir[resolution])
+            else:
+                if not datapoints_dir.get(resolution):
+                    datapoints_dir[resolution] = fdb.directory.create_or_open(
+                        tr, (self.time_series.series_type, org,
+                             machine, resolution))
+                if not metrics.get(machine):
+                    metrics[machine] = set()
+                sum_value = next(iter(datapoints.get("sum")))[0]
+                metrics[machine].add(
+                    (machine_metric, type(sum_value).__name__))
+                for stat in self.time_series.stats_aggregation:
+                    for value, timestamp in datapoints.get(stat):
+                        dt = datetime.fromtimestamp(timestamp)
+                        self.time_series.write_stat_aggregated(
+                            tr, org, machine, machine_metric,
+                            stat, dt, value, resolution,
+                            datapoints_dir=datapoints_dir[resolution])
+                        for resolution_aggregated in self.resolutions[
+                                self.resolutions.index(resolution)+1:]:
+                            if not datapoints_dir.get(resolution_aggregated):
+                                datapoints_dir[resolution_aggregated] = \
+                                    fdb.directory.create_or_open(
+                                    tr, (self.time_series.series_type, org,
+                                         machine, resolution_aggregated))
+                            self.time_series.write_stat_aggregated2(
+                                tr, org, machine, machine_metric,
+                                stat, dt, value, resolution_aggregated,
+                                datapoints_dir=datapoints_dir[
+                                    resolution_aggregated])
+        return metrics
+
     @profile
-    def write_in_queue(self, org, data):
+    def write_in_queue(self, org, data, options={}):
         try:
             if not data:
                 return
             db = self.open_db()
-            queue = Queue(get_queue_id(data))
-            queue.push(db, (org, data))
+            queue = Queue(get_queue_id(data, options))
+            options = json.dumps(options)
+            queue.push(db, (org, data, options))
             print("Pushed %d bytes" % len(data.encode('utf-8')))
         except fdb.FDBError as err:
             error_msg = ("%s on write_in_queue(data)" % (
@@ -262,34 +329,46 @@ class DBOperations:
             return error(503, error_msg, traceback=traceback.format_exc(),
                          request=str(data))
 
-    def write_in_kv_base(self, org, data):
+    def write_in_kv_base(self, org, data, format="influxdb"):
         try:
             if not data:
                 return
+            if format == "influxdb":
+                # Create a list of lines
+                data = data.split('\n')
+                # Get rid of all empty lines
+                data = [line for line in data if line != ""]
 
-            # Create a list of lines
-            data = data.split('\n')
-            # Get rid of all empty lines
-            data = [line for line in data if line != ""]
-
-            metrics = set()
-            total_datapoints = 0
-            machine = ""
-            for line in data:
-                dict_line = parse_line(line)
-                machine = dict_line["tags"]["machine_id"]
-                total_datapoints += len(dict_line["fields"].items())
-                metric = generate_metric(
-                    dict_line["tags"], dict_line["measurement"])
-                for field, _ in dict_line["fields"].items():
-                    metrics.add(machine + "-" + metric + "-" + field)
+                metrics = set()
+                total_datapoints = 0
+                machine = ""
+                for line in data:
+                    dict_line = parse_line(line)
+                    machine = dict_line["tags"]["machine_id"]
+                    total_datapoints += len(dict_line["fields"].items())
+                    metric = generate_metric(
+                        dict_line["tags"], dict_line["measurement"])
+                    for field, _ in dict_line["fields"].items():
+                        metrics.add(machine + "-" + metric + "-" + field)
+            else:
+                data = json.loads(data)
+                metrics = data.items()
+                machine = next(iter(data.items()))
+                total_datapoints = 0
+                for machine, datapoints in data.items():
+                    for stat, points in datapoints.items():
+                        if points:
+                            total_datapoints += len(points)
 
             self.log.warning((
                 "Request for resource: %s, number of metrics: %d," +
                 " number of datapoints: %d") % (
                 machine, len(metrics), total_datapoints))
 
-            metrics = self.write_lines(self.db, org, data)
+            if format == "influxdb":
+                metrics = self.write_influxdb(self.db, org, data)
+            else:
+                metrics = self.write_json(self.db, org, data)
             self.update_metrics(self.db, org, metrics)
         except fdb.FDBError as err:
             error_msg = ("%s on write_in_kv(data) with resource_id: %s" % (
@@ -299,8 +378,8 @@ class DBOperations:
                          request=str(data))
 
     @profile
-    def write_in_kv(self, org, data):
-        self.write_in_kv_base(org, data)
+    def write_in_kv(self, org, data, format="influxdb"):
+        self.write_in_kv_base(org, data, format)
 
     @fdb.transactional
     def update_metrics(self, tr, org, new_metrics):

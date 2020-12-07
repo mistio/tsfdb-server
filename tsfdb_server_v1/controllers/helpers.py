@@ -266,15 +266,19 @@ def separate_metrics(data):
     return '\n'.join(data_tsfdb), '\n'.join(data_rest)
 
 
-def get_machine_id(data):
-    data = data.split('\n')
-    # Get rid of all empty lines
-    data = [line for line in data if line != ""]
-    return parse_line(data[0])["tags"]["machine_id"]
+def get_machine_id(data, options={}):
+    format = options.get("format", "influxdb")
+    if format == "influxdb":
+        data = data.split('\n')
+        # Get rid of all empty lines
+        data = [line for line in data if line != ""]
+        return parse_line(data[0])["tags"]["machine_id"]
+    else:
+        return next(iter(json.loads(data))).split(".", 1)[0]
 
 
-def get_queue_id(data):
-    machine_id = get_machine_id(data)
+def get_queue_id(data, options):
+    machine_id = get_machine_id(data, options)
     if config('QUEUES') == -1:
         return machine_id
     return 'q' + str(hash(machine_id) % config('QUEUES'))

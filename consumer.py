@@ -1,5 +1,6 @@
 import fdb
 import random
+import json
 from time import sleep
 from datetime import datetime
 from tsfdb_server_v1.controllers.db import DBOperations
@@ -18,7 +19,8 @@ class Consumer:
         for queue_name in queue_names:
             consumer_lock = None
             queue_names.remove(queue_name)
-            if not tr[self.available_queues_subspace.pack((queue_name,))].present():
+            if not tr[self.available_queues_subspace.pack(
+                    (queue_name,))].present():
                 continue
             if tr[self.consumer_lock_subspace.pack((queue_name,))].present():
                 consumer_lock = fdb.tuple.unpack(
@@ -31,7 +33,6 @@ class Consumer:
                 return queue_name
         return None
 
-
     def consume_queue(self, acquired_queue):
         queue = Queue(acquired_queue)
         while True:
@@ -39,8 +40,12 @@ class Consumer:
                 item = queue.pop(self.db_ops.db)
                 if item:
                     item = fdb.tuple.unpack(item)
-                    org, data = item
-                    self.db_ops.write_in_kv(org, data)
+                    org, data = item[:2]
+                    options = {}
+                    if len(item) > 2:
+                        options = json.loads(item[2])
+                    self.db_ops.write_in_kv(
+                        org, data, options.get("format", "influxdb"))
                 else:
                     sleep(config('CONSUME_TIMEOUT'))
                     if queue.delete_if_empty(self.db_ops.db):
@@ -50,7 +55,8 @@ class Consumer:
                     self.db_ops.db.on_error(err.code).wait()
                 return
             except ValueError as err:
-                error(500, "Garbage data in queue: %s" % queue.name, traceback=err)
+                error(500, "Garbage data in queue: %s" %
+                      queue.name, traceback=err)
 
     def run(self):
         while True:
@@ -69,14 +75,16 @@ class Consumer:
                 if acquired_queue:
                     self.consume_queue(acquired_queue)
                 else:
-                    sleep_time = random.randint(1, config('QUEUE_RETRY_TIMEOUT'))
+                    sleep_time = random.randint(
+                        1, config('QUEUE_RETRY_TIMEOUT'))
                     print("Retrying to acquire a queue in %ds" %
-                        sleep_time)
+                          sleep_time)
                     sleep(sleep_time)
 
 
 def main():
     Consumer().run()
+
 
 if __name__ == "__main__":
     main()

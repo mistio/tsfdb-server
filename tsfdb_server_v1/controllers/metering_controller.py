@@ -45,7 +45,22 @@ def fetch_metering_datapoints(query, x_org_id, x_allowed_resources=None):  # noq
         return DatapointsResponse(query=str(query), series=data)
 
 
-def write_metering_datapoints(x_org_id, body):  # noqa: E501
+def write_metering_datapoints(x_org_id, request_body):  # noqa: E501
+    """Write metering datapoints to db
+
+     # noqa: E501
+
+    :param x_org_id: Organization id
+    :type x_org_id: str
+    :param request_body: Datapoints object to write
+    :type request_body: Dict[str, ]
+
+    :rtype: None
+    """
+    return 'do some magic!'
+
+
+def write_metering_datapoints_influxdb(x_org_id, body):  # noqa: E501
     """Write metering datapoints to db
 
      # noqa: E501
