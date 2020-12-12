@@ -8,7 +8,7 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
-  replicas: {{ .Values.deployment.tsfdb.consumer.replicas | default "1" }}
+  replicas: {{ .Values.deployment.consumer.replicas | default "1" }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}

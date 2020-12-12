@@ -3,7 +3,11 @@ image:
   registry: mist
   tag: $IMG_TAG
   pullPolicy: Always
-
+deployment:
+  server:
+    replicas: 1
+  consumer:
+    replicas: 1
 fdb:
   fdbdoc: false
   storageClass: ssd
