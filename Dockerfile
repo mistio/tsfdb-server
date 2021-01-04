@@ -17,8 +17,8 @@ COPY requirements.txt /usr/src/app/
 COPY setup.py /usr/src/app/
 
 RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pip3 install uwsgi ipython && \
-    pip3 install -e /usr/src/app
+    pip3 install --no-cache-dir uwsgi ipython && \
+    pip3 install --no-cache-dir -e /usr/src/app
 
 COPY . /usr/src/app
 
